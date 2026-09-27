@@ -82,6 +82,7 @@ export function Layout() {
             <NavLink to="/pokedex">Pokédex</NavLink>
             <NavLink to="/decks">Decks</NavLink>
             <NavLink to="/play">Play</NavLink>
+            <NavLink to="/arcade">Arcade</NavLink>
           </nav>
           <AccountMenu />
         </div>

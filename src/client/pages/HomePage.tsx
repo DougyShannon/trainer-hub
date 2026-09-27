@@ -81,6 +81,10 @@ export function HomePage() {
           <h2>Play</h2>
           <p>Open a table, send a link to a friend, and play a live game on a shared mat with hidden hands and prizes.</p>
         </Link>
+        <Link to="/arcade" className="tile">
+          <h2>Arcade</h2>
+          <p>Guess Who's That Pokémon? from a silhouette, or test your type matchups in a quick quiz.</p>
+        </Link>
         <Link to="/decks/new" className="tile">
           <h2>Deck builder</h2>
           <p>Build a 60-card deck with the rules checked as you go. Import and export TCG Live lists.</p>

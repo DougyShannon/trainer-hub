@@ -19,6 +19,7 @@ A fan-made site for playing the Pokémon Trading Card Game online with other peo
 | Deck page | `/decks/:id` (shareable when the deck is public) |
 | Play lobby | `/play` (open a table, join one, or watch a game) |
 | Game table | `/play/:id` (the link you send to an opponent) |
+| Arcade | `/arcade`, with `/arcade/whos-that-pokemon` and `/arcade/type-quiz` |
 
 ## Where the data comes from
 
