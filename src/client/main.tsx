@@ -1,5 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { PlayPage } from "./pages/PlayPage";
+import { GamePage } from "./pages/GamePage";
 import { BrowserRouter, Route, Routes } from "react-router";
 import { Layout } from "./components/Layout";
 import { HomePage } from "./pages/HomePage";
@@ -36,6 +38,8 @@ createRoot(document.getElementById("root")!).render(
           <Route path="decks/new" element={<DeckBuilderPage />} />
           <Route path="decks/:id" element={<DeckViewPage />} />
           <Route path="decks/:id/edit" element={<DeckBuilderPage />} />
+          <Route path="play" element={<PlayPage />} />
+          <Route path="play/:id" element={<GamePage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>
