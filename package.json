@@ -1,0 +1,32 @@
+{
+  "name": "trainer-hub",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "deploy": "npm run build && wrangler deploy",
+    "data:build": "node scripts/build-seed.mjs",
+    "db:setup:local": "wrangler d1 migrations apply trainer-hub --local && node scripts/load-seed.mjs --local",
+    "db:setup:remote": "wrangler d1 migrations apply trainer-hub --remote && node scripts/load-seed.mjs --remote"
+  },
+  "dependencies": {
+    "hono": "^4.13.9",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router": "^8.4.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.60.2",
+    "@cloudflare/workers-types": "^5.20260927.1",
+    "@types/node": "^26.6.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1",
+    "wrangler": "^4.141.0"
+  }
+}
