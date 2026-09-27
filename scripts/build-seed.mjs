@@ -61,12 +61,12 @@ const toInt = (v) => (v === undefined || v === null || v === "" || Number.isNaN(
 
 async function buildCards() {
   const sets = JSON.parse(await download(`${TCG}/sets/en.json`, "tcg/sets.json"));
-  const setLines = [];
-  const cardLines = [];
+  // One SQL file per set, so a reload can add just the sets that are new or changed.
+  const bySet = {};
   let cardCount = 0;
 
   for (const s of sets) {
-    setLines.push(insert("sets", {
+    const lines = [insert("sets", {
       id: s.id,
       name: s.name,
       series: s.series,
@@ -78,7 +78,7 @@ async function buildCards() {
       logo_url: s.images?.logo,
       legal_standard: isLegal(s.legalities, "standard"),
       legal_expanded: isLegal(s.legalities, "expanded"),
-    }));
+    })];
 
     const cards = JSON.parse(await download(`${TCG}/cards/en/${s.id}.json`, `tcg/cards/${s.id}.json`));
     for (const c of cards) {
@@ -94,7 +94,7 @@ async function buildCards() {
         ...(c.rules ?? []),
       ].filter(Boolean).join(" ").toLowerCase();
 
-      cardLines.push(insert("cards", {
+      lines.push(insert("cards", {
         id: c.id,
         set_id: s.id,
         number: c.number,
@@ -116,13 +116,14 @@ async function buildCards() {
         details: JSON.stringify(details),
       }));
       for (const dex of new Set(c.nationalPokedexNumbers ?? [])) {
-        cardLines.push(insert("card_pokemon", { card_id: c.id, dex }));
+        lines.push(insert("card_pokemon", { card_id: c.id, dex }));
       }
       cardCount++;
     }
+    bySet[s.id] = { cards: cards.length, lines };
   }
   console.log(`Cards: ${sets.length} sets, ${cardCount} cards`);
-  return { setLines, cardLines };
+  return bySet;
 }
 
 // PokeAPI prose uses markup like "[paralyze]{mechanic:paralysis}" or "[]{move:thunder}".
@@ -212,24 +213,19 @@ async function buildPokemon() {
   return lines;
 }
 
-// Split into files small enough for `wrangler d1 execute --file`.
-async function writeChunks(prefix, lines, perFile = 4000) {
-  for (let i = 0; i * perFile < lines.length; i++) {
-    const name = `${prefix}-${String(i + 1).padStart(2, "0")}.sql`;
-    await writeFile(path.join(OUT, name), lines.slice(i * perFile, (i + 1) * perFile).join("\n") + "\n");
-  }
-}
-
 await mkdir(RAW, { recursive: true });
 if (existsSync(OUT)) await rm(OUT, { recursive: true });
-await mkdir(OUT, { recursive: true });
+await mkdir(path.join(OUT, "sets"), { recursive: true });
 await mkdir("src/shared", { recursive: true });
 
-const { setLines, cardLines } = await buildCards();
+const bySet = await buildCards();
 const pokemonLines = await buildPokemon();
 
-await writeFile(path.join(OUT, "00-reset.sql"), "DELETE FROM card_pokemon;\nDELETE FROM cards;\nDELETE FROM sets;\nDELETE FROM pokemon;\n");
-await writeFile(path.join(OUT, "01-sets.sql"), setLines.join("\n") + "\n");
-await writeFile(path.join(OUT, "02-pokemon.sql"), pokemonLines.join("\n") + "\n");
-await writeChunks("03-cards", cardLines);
-console.log(`Wrote ${(await readdir(OUT)).length} files to ${OUT}`);
+// scripts/load-seed.mjs compares manifest.json with the database to work out what needs loading.
+for (const [id, { lines }] of Object.entries(bySet)) {
+  await writeFile(path.join(OUT, "sets", `${id}.sql`), lines.join("\n") + "\n");
+}
+await writeFile(path.join(OUT, "pokemon.sql"), pokemonLines.join("\n") + "\n");
+const manifest = { pokemon: pokemonLines.length, sets: Object.fromEntries(Object.entries(bySet).map(([id, s]) => [id, s.cards])) };
+await writeFile(path.join(OUT, "manifest.json"), JSON.stringify(manifest, null, 1) + "\n");
+console.log(`Wrote ${Object.keys(bySet).length} set files and the Pokémon file to ${OUT}`);
