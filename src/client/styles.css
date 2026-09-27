@@ -21,7 +21,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #0f1522;
     --surface: #172033;
     --surface-2: #1d2840;
@@ -39,6 +39,24 @@
     --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 4px 14px rgb(0 0 0 / 25%);
     color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+    --bg: #0f1522;
+    --surface: #172033;
+    --surface-2: #1d2840;
+    --ink: #e7ecf6;
+    --muted: #9aa6c0;
+    --line: #2a3650;
+    --accent: #8fa9f5;
+    --accent-ink: #0f1522;
+    --accent-soft: #1f2c4d;
+    --gold: #f0b83c;
+    --ok: #6fd19e;
+    --ok-soft: #173326;
+    --bad: #f28595;
+    --bad-soft: #3d1820;
+    --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 4px 14px rgb(0 0 0 / 25%);
+    color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -564,8 +582,9 @@ textarea { resize: vertical; font: inherit; }
   .table-wrap:has(.action-panel:not(.idle)) .my-hand { padding-bottom: 50vh; }
 }
 @media (prefers-color-scheme: dark) {
-  .banner.pick, .game-log .log-coin { background: #3a2f10; color: #f0d58a; }
+  :root:not([data-theme="light"]) :is(.banner.pick, .game-log .log-coin) { background: #3a2f10; color: #f0d58a; }
 }
+:root[data-theme="dark"] :is(.banner.pick, .game-log .log-coin) { background: #3a2f10; color: #f0d58a; }
 
 /* ----- Arcade ----- */
 .arcade-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
@@ -625,3 +644,47 @@ textarea { resize: vertical; font: inherit; }
 .quiz-explain.right { background: var(--ok-soft); }
 .quiz-explain.wrong { background: var(--bad-soft); }
 .quiz-done { max-width: 520px; margin: 0 auto; text-align: center; justify-items: center; }
+
+/* ----- Theme picker ----- */
+.theme-picker { font-size: 13px; color: var(--muted); display: flex; justify-content: center; gap: 6px; align-items: center; margin-top: 6px; }
+.theme-picker select { padding: 4px 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+
+/* ----- Professor Hub assistant ----- */
+.assistant-fab { position: fixed; right: 20px; bottom: 20px; z-index: 45; display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px 10px 10px; border-radius: 999px; border: 0; background: var(--accent); color: var(--accent-ink); font-weight: 700; box-shadow: 0 6px 20px rgb(20 28 60 / 30%); cursor: pointer; }
+.assistant-fab-icon { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: #ffd34d; color: #1b2a55; font: 800 18px var(--display); }
+.assistant-panel { position: fixed; right: 20px; bottom: 20px; z-index: 55; width: min(420px, calc(100vw - 40px)); height: min(640px, calc(100vh - 40px)); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 20px 60px rgb(0 0 0 / 30%); overflow: hidden; }
+.assistant-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); background: linear-gradient(135deg, var(--accent-soft), transparent); }
+.assistant-head > div:first-child { display: grid; }
+.assistant-head strong { font: 800 18px var(--display); }
+.assistant-head-actions { display: flex; gap: 6px; align-items: center; }
+.assistant-notes { padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--surface-2); display: grid; gap: 6px; max-height: 200px; overflow-y: auto; }
+.assistant-notes ol { margin: 0; padding-left: 20px; font-size: 13px; }
+.assistant-notes .link-btn { justify-self: start; padding: 0; }
+.assistant-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.assistant-empty { display: grid; gap: 10px; }
+.assistant-suggestions { display: flex; flex-wrap: wrap; gap: 6px; }
+.assistant-suggestions .chip-btn { text-align: left; }
+.bubble { max-width: 88%; padding: 9px 12px; border-radius: 14px; display: grid; gap: 6px; font-size: 14.5px; overflow-wrap: anywhere; }
+.bubble p { margin: 0; }
+.bubble ul { margin: 0; padding-left: 18px; }
+.bubble.user { align-self: flex-end; background: var(--accent); color: var(--accent-ink); border-bottom-right-radius: 4px; }
+.bubble.assistant { align-self: flex-start; background: var(--surface-2); border-bottom-left-radius: 4px; }
+.bubble.error { background: var(--bad-soft); color: var(--bad); }
+.bubble.working { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.bubble .link-btn { padding: 0; justify-self: start; font-size: 12px; }
+.bubble-deck { display: inline-block; justify-self: start; padding: 6px 10px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line); font-weight: 600; text-decoration: none; }
+.assistant-input { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; padding: 10px; border-top: 1px solid var(--line); align-items: end; }
+.assistant-input:not(:has(.mic-btn)) { grid-template-columns: minmax(0, 1fr) auto; }
+.assistant-input textarea { resize: none; min-height: 40px; max-height: 120px; padding: 9px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; field-sizing: content; }
+.assistant-aloud { grid-column: 1 / -1; font-size: 12px; }
+.mic-btn { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--ink); display: grid; place-items: center; cursor: pointer; }
+.mic-btn.on { background: var(--bad); color: #fff; border-color: var(--bad); animation: mic-pulse 1.2s ease-in-out infinite; }
+@keyframes mic-pulse { 50% { box-shadow: 0 0 0 6px rgb(176 40 58 / 25%); } }
+@media (prefers-reduced-motion: reduce) { .mic-btn.on { animation: none; } }
+.request-text { flex: 1 1 100%; }
+.request.done, .request.declined { opacity: 0.6; }
+@media (max-width: 640px) {
+  .assistant-panel { inset: 0; width: auto; height: auto; border-radius: 0; border: 0; }
+  .assistant-fab { right: 12px; bottom: 12px; padding: 8px; }
+  .assistant-fab-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+}

@@ -21,13 +21,13 @@ export const deckSummary = (r: Record<string, unknown>) => ({
   createdAt: r.created_at as string,
 });
 
-const newDeckId = () => {
+export const newDeckId = () => {
   const alphabet = "abcdefghijkmnpqrstuvwxyz23456789";
   return [...crypto.getRandomValues(new Uint8Array(10))].map((b) => alphabet[b % alphabet.length]).join("");
 };
 
 /** Checks a deck sent by the browser and works out whether it's legal. */
-async function readDeckBody(db: D1Database, body: Record<string, unknown>) {
+export async function readDeckBody(db: D1Database, body: Record<string, unknown>) {
   const name = String(body.name ?? "").trim().slice(0, 60) || "Untitled deck";
   const format = FORMATS.includes(body.format as DeckFormat) ? (body.format as DeckFormat) : "standard";
   const raw = Array.isArray(body.cards) ? body.cards : [];

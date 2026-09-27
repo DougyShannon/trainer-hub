@@ -18,5 +18,7 @@
     "bindings": [{ "name": "GAME_ROOM", "class_name": "GameRoom" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GameRoom"] }],
+  // Trainer names (comma-separated) that can see site change requests made through the assistant.
+  "vars": { "ADMIN_TRAINERS": "" },
   "observability": { "enabled": true }
 }

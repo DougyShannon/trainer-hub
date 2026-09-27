@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { ArcadePage } from "./pages/arcade/ArcadePage";
 import { WhosThatPage } from "./pages/arcade/WhosThatPage";
 import { TypeQuizPage } from "./pages/arcade/TypeQuizPage";
+import { RequestsPage } from "./pages/RequestsPage";
 import { PlayPage } from "./pages/PlayPage";
 import { GamePage } from "./pages/GamePage";
 import { BrowserRouter, Route, Routes } from "react-router";
@@ -46,6 +47,7 @@ createRoot(document.getElementById("root")!).render(
           <Route path="arcade" element={<ArcadePage />} />
           <Route path="arcade/whos-that-pokemon" element={<WhosThatPage />} />
           <Route path="arcade/type-quiz" element={<TypeQuizPage />} />
+          <Route path="admin/requests" element={<RequestsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>
