@@ -11,6 +11,7 @@ export type CardSummary = {
   number: string;
   setId: string;
   setName: string;
+  setCode?: string | null;
   releaseDate: string;
   image: string | null;
   legal: { standard: boolean; expanded: boolean };
@@ -80,34 +81,85 @@ export type PokemonDetail = PokemonSummary & {
   next: { id: number; slug: string; name: string } | null;
 };
 
+export type DeckFormat = "standard" | "expanded" | "unlimited";
+
+export type DeckSummary = {
+  id: string;
+  name: string;
+  format: DeckFormat;
+  coverCardId: string | null;
+  coverImage?: string | null;
+  cardCount: number;
+  isValid: boolean;
+  isPublic: boolean;
+  updatedAt: string;
+  createdAt: string;
+};
+
+export type DeckEntry = { card: CardSummary; count: number };
+
+export type DeckDetail = DeckSummary & {
+  isOwner: boolean;
+  owner: { trainerName: string; avatarDex: number };
+  cards: DeckEntry[];
+};
+
+export type Trainer = {
+  trainerName: string;
+  avatarDex: number;
+  favouriteDex: number | null;
+  bio: string;
+  country: string;
+  createdAt: string;
+};
+
+export type Me = Trainer & { email: string };
+
+/** Sends a change to the server as JSON and returns the reply, throwing the server's message on failure. */
+export async function send<T = { ok: true }>(method: "POST" | "PUT" | "DELETE", url: string, body?: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body ?? {}),
+  });
+  const data = (await res.json().catch(() => ({}))) as T & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
+  return data;
+}
+
 type State<T> = { data: T | null; error: string | null; loading: boolean };
 
 const cache = new Map<string, unknown>();
 
-/** Fetches JSON from the site's own API, with a small in-memory cache for back/forward navigation. */
-export function useApi<T>(url: string | null): State<T> {
+/**
+ * Fetches JSON from the site's own API, with a small in-memory cache for back/forward navigation.
+ * Pass `fresh` for anything that belongs to the logged-in trainer, so it's never shown out of date.
+ */
+export function useApi<T>(url: string | null, { fresh = false, reloadKey = 0 } = {}): State<T> & { reload: () => void } {
+  const [bump, setBump] = useState(0);
+  const useCache = !fresh;
   const [state, setState] = useState<State<T>>(() => ({
-    data: url && cache.has(url) ? (cache.get(url) as T) : null,
+    data: useCache && url && cache.has(url) ? (cache.get(url) as T) : null,
     error: null,
-    loading: !!url && !cache.has(url),
+    loading: !!url && !(useCache && cache.has(url)),
   }));
 
   useEffect(() => {
     if (!url) return;
-    if (cache.has(url)) {
+    if (useCache && cache.has(url)) {
       setState({ data: cache.get(url) as T, error: null, loading: false });
       return;
     }
     let cancelled = false;
     setState((s) => ({ data: s.data, error: null, loading: true }));
-    fetch(url)
+    fetch(url, { cache: fresh ? "no-store" : "default" })
       .then(async (res) => {
         const body = (await res.json()) as { error?: string };
         if (!res.ok) throw new Error(body?.error ?? `Request failed (${res.status})`);
         return body as T;
       })
       .then((data) => {
-        cache.set(url, data);
+        if (useCache) cache.set(url, data);
         if (!cancelled) setState({ data, error: null, loading: false });
       })
       .catch((err: Error) => {
@@ -116,7 +168,8 @@ export function useApi<T>(url: string | null): State<T> {
     return () => {
       cancelled = true;
     };
-  }, [url]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url, bump, reloadKey]);
 
-  return state;
+  return { ...state, reload: () => setBump((n) => n + 1) };
 }

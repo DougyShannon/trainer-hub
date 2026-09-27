@@ -1,5 +1,69 @@
-import { useEffect } from "react";
-import { Link, NavLink, Outlet, useLocation } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
+import { useAuth } from "../lib/auth";
+import { sprite } from "../lib/sprites";
+
+function AccountMenu() {
+  const { user, ready, logout } = useAuth();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => setOpen(false), [pathname]);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [open]);
+
+  if (!ready) return <div className="account" />;
+  if (!user) {
+    const next = encodeURIComponent(pathname === "/login" || pathname === "/signup" ? "/decks" : pathname);
+    return (
+      <div className="account">
+        <Link to={`/login?next=${next}`} className="nav-link">
+          Log in
+        </Link>
+        <Link to={`/signup?next=${next}`} className="primary-btn small">
+          Sign up
+        </Link>
+      </div>
+    );
+  }
+  return (
+    <div className="account" ref={ref}>
+      <button type="button" className="account-btn" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen(!open)}>
+        <img src={sprite(user.avatarDex)} alt="" width={36} height={36} />
+        <span>{user.trainerName}</span>
+      </button>
+      {open && (
+        <div className="account-menu" role="menu">
+          <Link role="menuitem" to={`/trainer/${user.trainerName}`}>
+            My profile
+          </Link>
+          <Link role="menuitem" to="/decks">
+            My decks
+          </Link>
+          <Link role="menuitem" to="/me/settings">
+            Settings
+          </Link>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={async () => {
+              await logout();
+              navigate("/");
+            }}
+          >
+            Log out
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function Layout() {
   const { pathname } = useLocation();
@@ -16,9 +80,10 @@ export function Layout() {
           <nav className="site-nav" aria-label="Main">
             <NavLink to="/cards">Cards</NavLink>
             <NavLink to="/pokedex">Pokédex</NavLink>
-            <span className="nav-soon" title="Coming in a later step">Decks</span>
+            <NavLink to="/decks">Decks</NavLink>
             <span className="nav-soon" title="Coming in a later step">Play</span>
           </nav>
+          <AccountMenu />
         </div>
       </header>
       <main className="site-main">
