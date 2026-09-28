@@ -1,6 +1,8 @@
 import type { RegionId } from "../../shared/venues";
+import { HOENN } from "./hoenn";
 import { JOHTO } from "./johto";
 import { KANTO } from "./kanto";
+import { SINNOH } from "./sinnoh";
 
 // Our own schematic "tactical" region maps: coastlines, routes and towns drawn from scratch in
 // SVG coordinates, loosely following each region's layout in the games (not traced from any
@@ -50,4 +52,6 @@ export type RegionMap = {
 export const REGION_MAPS: Partial<Record<RegionId, RegionMap>> = {
   kanto: KANTO,
   johto: JOHTO,
+  hoenn: HOENN,
+  sinnoh: SINNOH,
 };
