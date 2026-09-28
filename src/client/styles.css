@@ -688,3 +688,7 @@ textarea { resize: vertical; font: inherit; }
   .assistant-fab { right: 12px; bottom: 12px; padding: 8px; }
   .assistant-fab-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 }
+
+.crash-box { display: grid; gap: 8px; justify-items: start; }
+.crash-box p { margin: 0; }
+.crash-box code { font-family: "IBM Plex Mono", monospace; font-size: 0.85rem; background: var(--surface); color: var(--ink); padding: 6px 8px; border-radius: 6px; max-width: 100%; overflow-wrap: anywhere; }

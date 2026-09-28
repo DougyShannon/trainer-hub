@@ -4,6 +4,7 @@ import { useAuth } from "../lib/auth";
 import { sprite } from "../lib/sprites";
 import { getTheme, setTheme, type Theme } from "../lib/theme";
 import { Assistant } from "./Assistant";
+import { ErrorBoundary } from "./ErrorBoundary";
 
 function ThemePicker() {
   const [theme, setLocal] = useState<Theme>(getTheme);
@@ -109,9 +110,13 @@ export function Layout() {
         </div>
       </header>
       <main className="site-main">
-        <Outlet />
+        <ErrorBoundary resetKey={pathname}>
+          <Outlet />
+        </ErrorBoundary>
       </main>
-      <Assistant />
+      <ErrorBoundary quiet>
+        <Assistant />
+      </ErrorBoundary>
       <footer className="site-footer">
         <p>
           Trainer Hub is an unofficial fan site. Pokémon and all related names and images are trademarks of Nintendo,
