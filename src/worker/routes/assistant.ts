@@ -52,6 +52,13 @@ You have notes about this trainer from earlier chats, shown below. Read them bef
 type ApiBlock = { type: string; [k: string]: unknown };
 type ApiMessage = { role: "user" | "assistant"; content: string | ApiBlock[] };
 
+// Adds a note to the latest user turn (the API wants user and assistant turns to alternate).
+function addUserNote(messages: ApiMessage[], note: string) {
+  const last = messages[messages.length - 1];
+  if (last?.role !== "user") return void messages.push({ role: "user", content: note });
+  last.content = typeof last.content === "string" ? `${last.content}\n\n${note}` : [...last.content, { type: "text", text: note }];
+}
+
 class ClaudeError extends Error {
   constructor(
     message: string,
@@ -80,7 +87,7 @@ async function callClaude(env: AppEnv["Bindings"], system: ApiBlock[], messages:
     },
     body: JSON.stringify({
       model: env.ASSISTANT_MODEL || DEFAULT_MODEL,
-      max_tokens: 2000,
+      max_tokens: 8000,
       system,
       messages,
       tools: [...TOOLS, { type: "web_search_20250305", name: "web_search", max_uses: 3 }],
@@ -162,9 +169,24 @@ ${notes.length ? notes.map((n, i) => `${i + 1}. ${n}`).join("\n") : "(none yet)"
 
   const work = async () => {
     const messages = [...history];
+    let lastText = ""; // text from earlier steps, in case the final step has none
+    let nudged = false;
     try {
       for (let step = 0; step < MAX_STEPS; step++) {
         const res = await callClaude(c.env, system, messages);
+        const stepText = res.content
+          .filter((b) => b.type === "text")
+          .map((b) => b.text as string)
+          .join("")
+          .trim();
+        if (stepText) lastText = stepText;
+        if (res.stop_reason === "max_tokens" && step < MAX_STEPS - 1) {
+          // Ran out of room mid-answer (usually while writing a long deck list). Keep any text,
+          // drop the cut-off tool call and ask it to carry on more briefly.
+          if (stepText) messages.push({ role: "assistant", content: stepText });
+          addUserNote(messages, "(You ran out of space in that reply. Carry on from where you were, keeping each step shorter.)");
+          continue;
+        }
         const toolUses = res.content.filter((b) => b.type === "tool_use") as { type: string; id: string; name: string; input: Record<string, unknown> }[];
         for (const b of res.content) {
           if (b.type === "server_tool_use") await emit({ type: "status", text: STATUS.web_search });
@@ -174,12 +196,18 @@ ${notes.length ? notes.map((n, i) => `${i + 1}. ${n}`).join("\n") : "(none yet)"
           continue;
         }
         if (res.stop_reason !== "tool_use" || !toolUses.length) {
-          const text = res.content
-            .filter((b) => b.type === "text")
-            .map((b) => b.text as string)
-            .join("")
-            .trim();
-          await emit({ type: "reply", text: text || "Sorry, I didn't catch that. Could you ask again?", decks: ctx.savedDecks, actions: ctx.actions });
+          if (!stepText && !nudged && step < MAX_STEPS - 1) {
+            // Sometimes it finishes its tool work without saying anything; ask once for the answer.
+            nudged = true;
+            addUserNote(messages, "(Now reply to the trainer with your answer.)");
+            continue;
+          }
+          const text = stepText || lastText;
+          if (!text) console.error("assistant gave no text", res.stop_reason, res.content.map((b) => b.type));
+          const fallback = ctx.savedDecks.length
+            ? "Done! Your deck is saved."
+            : `Sorry, I didn't catch that. Could you ask again?${admin ? ` (Details for the site owner: Claude stopped with "${res.stop_reason}" after ${step + 1} steps.)` : ""}`;
+          await emit({ type: "reply", text: text || fallback, decks: ctx.savedDecks, actions: ctx.actions });
           return;
         }
         messages.push({ role: "assistant", content: res.content });
