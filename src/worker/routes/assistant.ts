@@ -52,6 +52,24 @@ You have notes about this trainer from earlier chats, shown below. Read them bef
 type ApiBlock = { type: string; [k: string]: unknown };
 type ApiMessage = { role: "user" | "assistant"; content: string | ApiBlock[] };
 
+class ClaudeError extends Error {
+  constructor(
+    message: string,
+    readonly detail: string,
+  ) {
+    super(message);
+  }
+}
+
+// Pulls the readable message out of an API error body, e.g. "Your credit balance is too low".
+function apiMessage(body: string) {
+  try {
+    return String((JSON.parse(body) as { error?: { message?: string } }).error?.message ?? body).slice(0, 300);
+  } catch {
+    return body.slice(0, 300);
+  }
+}
+
 async function callClaude(env: AppEnv["Bindings"], system: ApiBlock[], messages: ApiMessage[]) {
   const res = await fetch(`${env.ANTHROPIC_BASE_URL || "https://api.anthropic.com"}/v1/messages`, {
     method: "POST",
@@ -69,8 +87,9 @@ async function callClaude(env: AppEnv["Bindings"], system: ApiBlock[], messages:
     }),
   });
   if (!res.ok) {
-    console.error("Claude API error", res.status, await res.text());
-    throw new Error(res.status === 429 || res.status === 529 ? "busy" : "failed");
+    const detail = await res.text();
+    console.error("Claude API error", res.status, detail);
+    throw new ClaudeError(res.status === 429 || res.status === 529 ? "busy" : "failed", `${res.status}: ${apiMessage(detail)}`);
   }
   return (await res.json()) as { content: ApiBlock[]; stop_reason: string };
 }
@@ -180,10 +199,11 @@ ${notes.length ? notes.map((n, i) => `${i + 1}. ${n}`).join("\n") : "(none yet)"
       }
       await emit({ type: "reply", text: "That took more steps than I'm allowed. Could you ask in a simpler way?", decks: ctx.savedDecks, actions: ctx.actions });
     } catch (e) {
-      await emit({
-        type: "error",
-        message: (e as Error).message === "busy" ? "I'm a bit busy right now. Try again in a minute." : "Something went wrong on my side. Try again.",
-      });
+      console.error("assistant failed", e);
+      const friendly = (e as Error).message === "busy" ? "I'm a bit busy right now. Try again in a minute." : "Something went wrong on my side. Try again.";
+      // The site owner sees the technical reason too, so problems like a bad key or no credit are easy to spot.
+      const detail = e instanceof ClaudeError ? `Claude said ${e.detail}` : String((e as Error)?.message ?? e);
+      await emit({ type: "error", message: admin ? `${friendly} (Details for the site owner: ${detail})` : friendly });
     } finally {
       await writer.close();
     }
