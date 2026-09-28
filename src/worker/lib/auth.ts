@@ -77,6 +77,15 @@ export const loadUser: MiddlewareHandler<AppEnv> = async (c, next) => {
   await next();
 };
 
+/** Site owners are the trainers named in the ADMIN_TRAINERS setting. */
+export const isAdmin = (env: AppEnv["Bindings"], user: User | null) =>
+  !!user &&
+  (env.ADMIN_TRAINERS ?? "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+    .includes(user.trainerName.toLowerCase());
+
 export const requireUser: MiddlewareHandler<AppEnv> = async (c, next) => {
   if (!c.get("user")) return c.json({ error: "Please log in first" }, 401);
   await next();

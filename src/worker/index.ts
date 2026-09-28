@@ -6,6 +6,7 @@ import { accounts } from "./routes/accounts";
 import { decks } from "./routes/decks";
 import { games } from "./routes/games";
 import { assistant } from "./routes/assistant";
+import { practice } from "./routes/practice";
 
 const app = new Hono<AppEnv>();
 
@@ -17,6 +18,7 @@ app.route("/", accounts);
 app.route("/", decks);
 app.route("/", games);
 app.route("/", assistant);
+app.route("/", practice);
 
 app.notFound((c) => c.json({ error: "Not found" }, 404));
 app.onError((err, c) => {
