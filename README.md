@@ -26,7 +26,7 @@ A fan-made site for playing the Pokémon Trading Card Game online with other peo
 - **Cards:** [PokemonTCG/pokemon-tcg-data](https://github.com/PokemonTCG/pokemon-tcg-data), the open data behind pokemontcg.io. Card images load from that project's image servers.
 - **Pokémon:** the CSV files in [PokeAPI/pokeapi](https://github.com/PokeAPI/pokeapi). Sprites, artwork and cries load from [PokeAPI/sprites](https://github.com/PokeAPI/sprites) and [PokeAPI/cries](https://github.com/PokeAPI/cries).
 
-`npm run data:build` downloads both and writes SQL files to `data/seed/`. Nothing in `data/` is committed.
+`npm run data:build` downloads both and writes SQL files to `data/seed/`, one per card set. Nothing in `data/` is committed.
 
 ## Running it on your own computer
 
@@ -47,9 +47,9 @@ The **Deploy** GitHub Action publishes the site every time `main` changes.
 2. In GitHub, open this repository's **Settings → Secrets and variables → Actions** and add two secrets:
    - `CLOUDFLARE_API_TOKEN`: the token from step 1
    - `CLOUDFLARE_ACCOUNT_ID`: shown on the right of your Cloudflare dashboard's home page
-3. In the **Actions** tab, open **Deploy**, click **Run workflow**, tick **Reload card and Pokémon data**, and run it.
+3. In the **Actions** tab, open **Deploy**, click **Run workflow**, tick **Load new card sets and Pokémon**, and run it.
 
-The site appears at `https://trainer-hub.<your-subdomain>.workers.dev`. Run the workflow with the box ticked again whenever a new card set comes out.
+The site appears at `https://trainer-hub.<your-subdomain>.workers.dev`. Run the workflow with the box ticked again whenever a new card set comes out. It only loads sets that are new or have changed, which keeps it inside Cloudflare's free allowance of 100,000 database row writes a day. The very first load of all ~20,000 cards goes over that allowance for the day it runs, so saving accounts and decks may fail until it resets at midnight UTC. To wipe and reload everything, run `node scripts/load-seed.mjs --remote --full` yourself.
 
 ## Switching on the assistant
 

@@ -1,7 +1,8 @@
 # Publishes the site to Cloudflare on every change to main.
 # Needs two repository secrets: CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID.
-# Run it by hand from the Actions tab with "Reload card and Pokémon data" ticked
-# the first time, and again whenever a new card set comes out.
+# Run it by hand from the Actions tab with "Load new card sets" ticked the first
+# time, and again whenever a new card set comes out. It only adds sets that are
+# new or changed, so it stays inside Cloudflare's free daily database allowance.
 name: Deploy
 
 on:
@@ -10,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       load_data:
-        description: "Reload card and Pokémon data"
+        description: "Load new card sets and Pokémon"
         type: boolean
         default: false
 
@@ -35,6 +36,6 @@ jobs:
         run: npx wrangler deploy
       - name: Update the database tables
         run: npx wrangler d1 migrations apply trainer-hub --remote
-      - name: Load card and Pokémon data
+      - name: Load new card sets and Pokémon
         if: ${{ inputs.load_data }}
         run: npm run data:build && node scripts/load-seed.mjs --remote
