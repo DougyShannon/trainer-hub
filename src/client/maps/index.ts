@@ -1,8 +1,13 @@
 import type { RegionId } from "../../shared/venues";
+import { ALOLA } from "./alola";
+import { GALAR } from "./galar";
 import { HOENN } from "./hoenn";
 import { JOHTO } from "./johto";
+import { KALOS } from "./kalos";
 import { KANTO } from "./kanto";
+import { PALDEA } from "./paldea";
 import { SINNOH } from "./sinnoh";
+import { UNOVA } from "./unova";
 
 // Our own schematic "tactical" region maps: coastlines, routes and towns drawn from scratch in
 // SVG coordinates, loosely following each region's layout in the games (not traced from any
@@ -15,6 +20,8 @@ export type MapRoute = {
   points: Point[];
   /** Water routes draw dashed. */
   sea?: boolean;
+  /** Railway lines draw as a thin track. */
+  rail?: boolean;
   /** Where the route's name sits. */
   label?: Point;
 };
@@ -29,7 +36,10 @@ export type MapPlace = {
   venue?: string;
   /** Label offset from the place, and which way the text runs from there. */
   label: { dx: number; dy: number; anchor?: "start" | "middle" | "end" };
-  glyph?: "mountain" | "forest" | "park" | "house";
+  /** "label" is text only, for seas and islands; "crater" is a large ringed hollow. A sized park or crater is an area, labelled in capitals. */
+  glyph?: "mountain" | "forest" | "park" | "house" | "label" | "crater";
+  /** Width and height for a "park" or "crater" glyph. */
+  size?: Point;
   /** Makes the place an arrow off the map's edge that opens a neighbouring region's map. */
   exit?: { to: RegionId; facing: "east" | "west" };
 };
@@ -54,4 +64,9 @@ export const REGION_MAPS: Partial<Record<RegionId, RegionMap>> = {
   johto: JOHTO,
   hoenn: HOENN,
   sinnoh: SINNOH,
+  unova: UNOVA,
+  kalos: KALOS,
+  alola: ALOLA,
+  galar: GALAR,
+  paldea: PALDEA,
 };

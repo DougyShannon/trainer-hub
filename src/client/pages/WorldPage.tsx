@@ -136,13 +136,13 @@ function MapKey() {
   return (
     <div className="panel map-key">
       <h2>Choose a venue</h2>
-      <p className="muted small">Tap a gym or the Indigo Plateau on the map to see who's there and start a battle.</p>
+      <p className="muted small">Tap a gym, grand trial or league on the map to see who's there and start a battle.</p>
       <ul>
         <li>
           <svg viewBox="-14 -14 28 28" aria-hidden="true">
             <rect className="key-gym" x={-7} y={-7} width={14} height={14} transform="rotate(45)" />
           </svg>
-          Gym, coloured by its type
+          Gym or grand trial, coloured by its type
         </li>
         <li>
           <svg viewBox="-14 -14 28 28" aria-hidden="true">
