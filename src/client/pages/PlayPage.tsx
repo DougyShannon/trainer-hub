@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { send, useApi, type DeckSummary, type GameSummary } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { sprite } from "../lib/sprites";
 import { FORMAT_LABELS } from "../../shared/deck-rules";
 import { Loading } from "../components/ui";
+import { VenueSelect, VenueTag } from "../components/Venue";
+import { venueById } from "../../shared/venues";
 
 /** Re-fetches lobby lists every few seconds so new tables show up without a refresh. */
 function useTicker(ms: number) {
@@ -53,6 +55,9 @@ export function PlayPage() {
   const playable = decks.data?.filter((d) => d.isValid) ?? [];
   const [deckId, setDeckId] = useState("");
   const [isOpen, setIsOpen] = useState(true);
+  const [params] = useSearchParams();
+  // The map page links here with ?venue=pewter-city-gym to open a table at that gym.
+  const [venue, setVenue] = useState(() => venueById(params.get("venue"))?.id ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,7 +69,7 @@ export function PlayPage() {
     setBusy(true);
     setError(null);
     try {
-      const { id } = await send<{ id: string }>("POST", "/api/games", { deckId, isOpen });
+      const { id } = await send<{ id: string }>("POST", "/api/games", { deckId, isOpen, venue: venue || null });
       navigate(`/play/${id}`);
     } catch (e) {
       setError((e as Error).message);
@@ -85,6 +90,9 @@ export function PlayPage() {
             the site keeps hidden cards hidden, deals prizes, flips coins and tracks turns.
           </p>
         </div>
+        <Link to="/play/venues" className="secondary-btn">
+          Battle venues
+        </Link>
       </div>
 
       <div className="play-grid">
@@ -115,6 +123,10 @@ export function PlayPage() {
                     </option>
                   ))}
                 </select>
+              </label>
+              <label className="field">
+                <span>Where to battle</span>
+                <VenueSelect value={venue} onChange={setVenue} />
               </label>
               <div className="field">
                 <span>Who can join</span>
@@ -148,6 +160,7 @@ export function PlayPage() {
                   <span className="game-meta">
                     {FORMAT_LABELS[g.format]} · {timeAgo(g.createdAt)}
                   </span>
+                  <VenueTag id={g.venue} />
                   <Link to={`/play/${g.id}`} className="primary-btn small">
                     Join
                   </Link>
@@ -172,6 +185,7 @@ export function PlayPage() {
                     {opponent ? <>vs {opponent.trainerName}</> : <>Your table</>} · {FORMAT_LABELS[g.format]}
                   </span>
                   <span className="game-meta">{STATUS_LABEL[g.status]}</span>
+                  <VenueTag id={g.venue} />
                   <Link to={`/play/${g.id}`} className="secondary-btn small">
                     {g.status === "waiting" ? "Open" : "Return to game"}
                   </Link>
@@ -194,6 +208,7 @@ export function PlayPage() {
                 <span className="game-meta">
                   {FORMAT_LABELS[g.format]} · {STATUS_LABEL[g.status]}
                 </span>
+                <VenueTag id={g.venue} />
                 <Link to={`/play/${g.id}`} className="secondary-btn small">
                   Watch
                 </Link>
