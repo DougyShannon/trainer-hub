@@ -27,9 +27,9 @@ export function HomePage() {
           <p className="eyebrow">Fan-made Pokémon TCG hub</p>
           <h1>Look up any card. Learn every Pokémon.</h1>
           <p className="lede">
-            Search {cardCount ? cardCount.toLocaleString() : "every"} cards from {sets.data?.length ?? "every"} sets, and
-            explore all {pokemon.data?.length ?? "1,025"} Pokémon. Deck building and live games against other players are
-            on the way.
+            Search {cardCount ? cardCount.toLocaleString() : "every"} cards from {sets.data?.length ?? "every"} sets,
+            explore all {pokemon.data?.length ?? "1,025"} Pokémon, and build 60-card decks with the rules checked for you.
+            Live games against other players are on the way.
           </p>
           <form
             className="hero-search"
@@ -77,6 +77,10 @@ export function HomePage() {
           <h2>Pokédex</h2>
           <p>Stats, abilities, evolutions, type matchups, sprites and every TCG card for each Pokémon.</p>
         </Link>
+        <Link to="/decks/new" className="tile">
+          <h2>Deck builder</h2>
+          <p>Build a 60-card deck with the rules checked as you go. Import and export TCG Live lists.</p>
+        </Link>
         {latestSet && (
           <Link to={`/cards?set=${latestSet.id}`} className="tile">
             <span className="eyebrow">Newest set</span>
@@ -93,10 +97,7 @@ export function HomePage() {
         <h2>Coming next</h2>
         <ul>
           <li>
-            <strong>Deck builder</strong> with the 60-card rules checked for you, plus import and export.
-          </li>
-          <li>
-            <strong>Trainer profiles</strong> to save decks, favourite Pokémon and match records.
+            <strong>Match records</strong> and ratings on trainer profiles.
           </li>
           <li>
             <strong>Live games</strong> against other players at a shared table.

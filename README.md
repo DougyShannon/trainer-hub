@@ -11,6 +11,12 @@ A fan-made site for playing the Pokémon Trading Card Game online with other peo
 | Card detail | `/cards/:id`, for example `/cards/base1-4` |
 | Pokédex | `/pokedex` |
 | Pokémon detail | `/pokedex/:name`, for example `/pokedex/eevee` |
+| Sign up and log in | `/signup`, `/login` |
+| Trainer profile | `/trainer/:name` |
+| Settings | `/me/settings` |
+| My decks | `/decks` |
+| Deck builder | `/decks/new`, `/decks/:id/edit` |
+| Deck page | `/decks/:id` (shareable when the deck is public) |
 
 ## Where the data comes from
 
@@ -44,7 +50,8 @@ The site appears at `https://trainer-hub.<your-subdomain>.workers.dev`. Run the 
 
 ## Project layout
 
-- `src/worker/` is the server code: the `/api/...` routes that read the database.
+- `src/worker/` is the server code: the `/api/...` routes. `routes/reference.ts` serves cards and Pokémon, `routes/accounts.ts` handles sign-up, log-in and profiles, and `routes/decks.ts` saves and imports decks.
+- `src/shared/deck-rules.ts` holds the 60-card deck rules, used by both the deck builder and the server.
 - `src/client/` is the website itself (React).
 - `migrations/` holds the database tables.
 - `scripts/` holds the data download and loading scripts.
