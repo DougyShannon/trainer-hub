@@ -21,10 +21,12 @@ import { DecksPage } from "./pages/DecksPage";
 import { DeckBuilderPage } from "./pages/DeckBuilderPage";
 import { DeckViewPage } from "./pages/DeckViewPage";
 import { AuthProvider } from "./lib/auth";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./styles.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
+    <ErrorBoundary>
     <AuthProvider>
     <BrowserRouter>
       <Routes>
@@ -53,5 +55,6 @@ createRoot(document.getElementById("root")!).render(
       </Routes>
     </BrowserRouter>
     </AuthProvider>
+    </ErrorBoundary>
   </StrictMode>,
 );
