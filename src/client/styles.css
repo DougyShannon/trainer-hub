@@ -785,6 +785,99 @@ textarea { resize: vertical; font: inherit; }
 .venue-card-foot .primary-btn { margin-left: auto; }
 .venue-league-badge { background: #d4a017; color: #2a1f00; }
 
+/* ----- Region maps: our own schematic "tactical" maps, one per region ----- */
+:root {
+  --map-sea: #d9e6f3;
+  --map-sea-line: rgb(39 72 168 / 9%);
+  --map-land: #f7f4ea;
+  --map-coast: #8298bb;
+  --map-grid: rgb(39 72 168 / 7%);
+  --map-route: #b5bdcd;
+  --map-glyph: #a39c86;
+  --map-frame: #2748a8;
+}
+:root[data-mode="dark"] {
+  --map-sea: #060d0b;
+  --map-sea-line: rgb(182 242 58 / 6%);
+  --map-land: #111a14;
+  --map-coast: rgb(182 242 58 / 55%);
+  --map-grid: rgb(182 242 58 / 6%);
+  --map-route: #3b4a3f;
+  --map-glyph: #4f6053;
+  --map-frame: #b6f23a;
+}
+.world-map-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; margin-bottom: 28px; }
+.region-map { margin: 0; min-width: 0; overflow-x: auto; border: 1px solid var(--line); border-radius: calc(14px * var(--round)); background: var(--map-sea); overscroll-behavior-x: contain; }
+.region-map svg { display: block; width: 100%; min-width: 640px; height: auto; user-select: none; -webkit-user-select: none; }
+.region-map-hint { display: none; padding: 6px 12px; position: sticky; left: 0; }
+@media (max-width: 900px) {
+  .world-map-layout { grid-template-columns: 1fr; }
+}
+@media (max-width: 680px) {
+  .region-map-hint { display: block; }
+}
+.map-sea { fill: var(--map-sea); }
+.map-sea-line { stroke: var(--map-sea-line); stroke-width: 1.5; }
+.map-land { fill: var(--map-land); stroke: var(--map-coast); stroke-width: 2; stroke-linejoin: round; }
+.map-water { fill: var(--map-sea); stroke: var(--map-coast); stroke-width: 1.5; stroke-linejoin: round; }
+.map-grid line { stroke: var(--map-grid); stroke-width: 1; }
+.map-route { fill: none; stroke: var(--map-route); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+.map-sea-route { stroke-width: 2.5; stroke-dasharray: 2 9; }
+.map-glyph { fill: none; stroke: var(--map-glyph); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.map-park { stroke-dasharray: 5 5; }
+.map-dot { fill: var(--map-glyph); }
+.map-town { fill: var(--map-land); stroke: var(--ink); stroke-width: 2; }
+.map-label, .map-landmark-label, .map-route-label, .map-grid-label, .pin-count-text, .map-title, .map-subtitle, .map-compass text {
+  paint-order: stroke; stroke: var(--map-land); stroke-width: 4px; stroke-linejoin: round;
+}
+.map-label { font: 700 16px/1 var(--body); fill: var(--ink); }
+.map-landmark-label { font: italic 500 13px/1 var(--body); fill: var(--muted); }
+.map-route-label { font: 500 11px/1 var(--mono); fill: var(--muted); }
+.map-grid-label { font: 500 10px/1 var(--mono); fill: var(--muted); stroke: var(--map-sea); opacity: 0.8; }
+.map-frame > rect { fill: none; stroke: var(--map-frame); stroke-opacity: 0.35; stroke-width: 1; }
+.map-title { font: 800 30px/1 var(--display); fill: var(--ink); stroke: var(--map-sea); letter-spacing: 0.02em; text-transform: uppercase; }
+.map-subtitle { font: 500 11px/1 var(--mono); fill: var(--muted); stroke: var(--map-sea); letter-spacing: 0.1em; text-transform: uppercase; }
+.map-title-rule { stroke: var(--map-frame); stroke-width: 2; }
+.map-compass circle { fill: var(--map-sea); stroke: var(--map-frame); stroke-opacity: 0.5; }
+.map-compass path { fill: var(--map-route); }
+.map-compass .map-compass-north { fill: var(--map-frame); }
+.map-compass text { font: 600 11px/1 var(--mono); fill: var(--map-frame); stroke: var(--map-sea); }
+:root[data-mode="dark"] .map-label { font: 600 14px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.06em; }
+
+.map-pin { cursor: pointer; outline: none; }
+.pin-hit { fill: transparent; }
+.pin-body { fill: var(--t); stroke: var(--map-land); stroke-width: 3; transition: stroke 0.15s; }
+.pin-mark { fill: #2a1f00; }
+.map-pin:hover .pin-body, .map-pin:focus-visible .pin-body { stroke: var(--ink); }
+.map-pin:focus-visible .pin-hit { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 4; }
+.map-pin.selected .pin-body { stroke: var(--map-frame); stroke-width: 3.5; }
+.map-pin.selected .map-pin-label { fill: var(--map-frame); }
+:root[data-mode="light"] .map-pin.selected .map-pin-label { fill: var(--accent); }
+.pin-target { fill: none; stroke: var(--map-frame); stroke-width: 2.5; }
+.pin-pulse { fill: none; stroke: var(--t); stroke-width: 2; transform-box: fill-box; transform-origin: center; animation: pin-pulse 1.8s ease-out infinite; }
+@keyframes pin-pulse { from { transform: scale(1); opacity: 0.9; } to { transform: scale(2.4); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .pin-pulse { animation: none; opacity: 0.6; } }
+.pin-earned { fill: var(--gold); stroke: var(--map-land); stroke-width: 2; }
+.pin-count { fill: var(--accent); stroke: var(--map-land); stroke-width: 2; }
+.pin-count-text { font: 700 10px/1 var(--mono); fill: var(--accent-ink); stroke: none; text-anchor: middle; }
+
+.venue-intel { display: grid; gap: 12px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 72px); scroll-margin-top: 80px; }
+@media (max-width: 900px) { .venue-intel { position: static; } }
+.venue-intel .venue-card-body { gap: 8px; }
+.venue-intel .venue-card-body > .primary-btn { justify-self: start; }
+.intel-practice { display: grid; gap: 8px; border-top: 1px solid var(--line); padding-top: 10px; margin-top: 4px; }
+.intel-opponent { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.intel-opponent img { image-rendering: pixelated; }
+.intel-opponent > div { display: grid; }
+.map-key ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 14px; }
+.map-key li { display: flex; align-items: center; gap: 10px; }
+.map-key svg { width: 26px; height: 26px; flex: none; }
+.key-gym { fill: #3fa129; stroke: var(--surface); stroke-width: 2; }
+.key-league { fill: #d4a017; stroke: var(--surface); stroke-width: 2; }
+.key-count { fill: var(--accent); }
+.key-earned { fill: var(--gold); }
+.world-list-head { margin-bottom: 12px; }
+
 /* ----- Practice play ----- */
 .practice-callout { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; margin-bottom: 16px; }
 .practice-callout h2 { margin: 0 0 4px; }
