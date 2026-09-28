@@ -172,7 +172,9 @@ function CardSearch({ format, counts, onAdd }: { format: DeckFormat; counts: Map
   const [type, setType] = useState("");
   const [page, setPage] = useState(1);
 
-  useEffect(() => setPage(1), [q, supertype, type, format]);
+  useEffect(() => {
+    setPage(1);
+  }, [q, supertype, type, format]);
 
   const params = new URLSearchParams();
   if (q) params.set("q", q);

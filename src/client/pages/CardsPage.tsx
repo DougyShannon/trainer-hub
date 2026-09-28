@@ -21,7 +21,9 @@ export function CardsPage() {
   const [params, setParams] = useSearchParams();
   const [draft, setDraft] = useState(params.get("q") ?? "");
 
-  useEffect(() => setDraft(params.get("q") ?? ""), [params]);
+  useEffect(() => {
+    setDraft(params.get("q") ?? "");
+  }, [params]);
 
   const sets = useApi<SetInfo[]>("/api/sets");
   const filters = useApi<{ rarities: string[] }>("/api/cards/filters");

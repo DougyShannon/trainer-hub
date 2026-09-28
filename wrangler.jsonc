@@ -19,6 +19,6 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GameRoom"] }],
   // Trainer names (comma-separated) that can see site change requests made through the assistant.
-  "vars": { "ADMIN_TRAINERS": "" },
+  "vars": { "ADMIN_TRAINERS": "Professor_D" },
   "observability": { "enabled": true }
 }
