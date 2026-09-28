@@ -20,8 +20,21 @@ function Glyph({ place }: { place: MapPlace }) {
           ))}
         </g>
       );
-    case "park":
-      return <rect className="map-glyph map-park" x={x - 34} y={y - 20} width={68} height={40} rx={10} />;
+    case "park": {
+      const [w, h] = place.size ?? [68, 40];
+      return <rect className="map-glyph map-park" x={x - w / 2} y={y - h / 2} width={w} height={h} rx={10} />;
+    }
+    case "crater": {
+      const [w, h] = place.size ?? [200, 150];
+      return (
+        <g>
+          <ellipse className="map-crater" cx={x} cy={y} rx={w / 2} ry={h / 2} />
+          <ellipse className="map-glyph map-park" cx={x} cy={y} rx={w / 2 - 16} ry={h / 2 - 16} />
+        </g>
+      );
+    }
+    case "label":
+      return null;
     case "house":
       return <path className="map-glyph" d={`M ${x - 7} ${y + 6} V ${y - 2} L ${x} ${y - 9} L ${x + 7} ${y - 2} V ${y + 6} Z`} />;
     default:
@@ -135,7 +148,7 @@ export function RegionMap({ map, selected, onSelect, onRegion, waitingAt, earned
           <Glyph key={p.id} place={p} />
         ))}
         {map.routes.map((r) => (
-          <path key={r.name} className={r.sea ? "map-route map-sea-route" : "map-route"} d={path(r.points)} />
+          <path key={r.name} className={r.sea ? "map-route map-sea-route" : r.rail ? "map-route map-rail" : "map-route"} d={path(r.points)} />
         ))}
         {map.routes.map((r) =>
           r.label ? (
@@ -150,7 +163,7 @@ export function RegionMap({ map, selected, onSelect, onRegion, waitingAt, earned
             p.kind === "landmark" ? (
               <g key={p.id}>
                 {!p.glyph && <Glyph place={p} />}
-                <Label place={p} className="map-landmark-label" />
+                <Label place={p} className={p.glyph === "label" || p.glyph === "crater" || p.size ? "map-area-label" : "map-landmark-label"} />
               </g>
             ) : (
               <g key={p.id}>

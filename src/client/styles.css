@@ -823,6 +823,7 @@ textarea { resize: vertical; font: inherit; }
 .map-grid line { stroke: var(--map-grid); stroke-width: 1; }
 .map-route { fill: none; stroke: var(--map-route); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
 .map-sea-route { stroke-width: 2.5; stroke-dasharray: 2 9; }
+.map-rail { stroke-width: 3; stroke-dasharray: 12 5; }
 .map-glyph { fill: none; stroke: var(--map-glyph); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .map-park { stroke-dasharray: 5 5; }
 .map-exit { cursor: pointer; outline: none; }
@@ -833,11 +834,13 @@ textarea { resize: vertical; font: inherit; }
 :root[data-mode="light"] .map-exit-label { fill: var(--accent); }
 .map-dot { fill: var(--map-glyph); }
 .map-town { fill: var(--map-land); stroke: var(--ink); stroke-width: 2; }
-.map-label, .map-landmark-label, .map-route-label, .map-grid-label, .pin-count-text, .map-title, .map-subtitle, .map-compass text {
+.map-label, .map-landmark-label, .map-area-label, .map-route-label, .map-grid-label, .pin-count-text, .map-title, .map-subtitle, .map-compass text {
   paint-order: stroke; stroke: var(--map-land); stroke-width: 4px; stroke-linejoin: round;
 }
 .map-label { font: 700 16px/1 var(--body); fill: var(--ink); }
 .map-landmark-label { font: italic 500 13px/1 var(--body); fill: var(--muted); }
+.map-area-label { font: 600 12px/1 var(--mono); letter-spacing: 0.18em; text-transform: uppercase; fill: var(--muted); }
+.map-crater { fill: color-mix(in srgb, var(--map-glyph) 16%, var(--map-land)); stroke: var(--map-glyph); stroke-width: 2.5; }
 .map-route-label { font: 500 11px/1 var(--mono); fill: var(--muted); }
 .map-grid-label { font: 500 10px/1 var(--mono); fill: var(--muted); stroke: var(--map-sea); opacity: 0.8; }
 .map-frame > rect { fill: none; stroke: var(--map-frame); stroke-opacity: 0.35; stroke-width: 1; }
@@ -854,6 +857,8 @@ textarea { resize: vertical; font: inherit; }
 .pin-hit { fill: transparent; }
 .pin-body { fill: var(--t); stroke: var(--map-land); stroke-width: 3; transition: stroke 0.15s; }
 .pin-mark { fill: #2a1f00; }
+/* Dark-type pins would vanish into the dark map without a lighter rim. */
+:root[data-mode="dark"] .map-pin[data-venue-type="dark"] .pin-body { stroke: var(--muted); stroke-width: 2; }
 .map-pin:hover .pin-body, .map-pin:focus-visible .pin-body { stroke: var(--ink); }
 .map-pin:focus-visible .pin-hit { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 4; }
 .map-pin.selected .pin-body { stroke: var(--map-frame); stroke-width: 3.5; }
