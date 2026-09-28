@@ -825,6 +825,12 @@ textarea { resize: vertical; font: inherit; }
 .map-sea-route { stroke-width: 2.5; stroke-dasharray: 2 9; }
 .map-glyph { fill: none; stroke: var(--map-glyph); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .map-park { stroke-dasharray: 5 5; }
+.map-exit { cursor: pointer; outline: none; }
+.map-exit path { fill: none; stroke: var(--map-frame); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.map-exit:hover path { stroke-width: 3.5; }
+.map-exit:focus-visible .pin-hit { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 4; }
+.map-exit .map-exit-label { font-style: normal; font-weight: 600; fill: var(--map-frame); }
+:root[data-mode="light"] .map-exit-label { fill: var(--accent); }
 .map-dot { fill: var(--map-glyph); }
 .map-town { fill: var(--map-land); stroke: var(--ink); stroke-width: 2; }
 .map-label, .map-landmark-label, .map-route-label, .map-grid-label, .pin-count-text, .map-title, .map-subtitle, .map-compass text {

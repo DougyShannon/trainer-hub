@@ -92,7 +92,7 @@ export function WorldPage() {
       {map && (
         <div className="world-map-layout">
           <figure className="region-map">
-            <RegionMap map={map} selected={selected?.id ?? null} onSelect={pickOnMap} waitingAt={waitingAt} earned={earned} />
+            <RegionMap map={map} selected={selected?.id ?? null} onSelect={pickOnMap} onRegion={(r) => choose({ region: r, venue: null })} waitingAt={waitingAt} earned={earned} />
             <figcaption className="small muted region-map-hint">Swipe to see the whole map.</figcaption>
           </figure>
           <aside ref={intel} className="venue-intel" aria-live="polite">

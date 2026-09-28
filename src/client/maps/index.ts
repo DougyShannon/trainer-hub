@@ -1,4 +1,5 @@
 import type { RegionId } from "../../shared/venues";
+import { JOHTO } from "./johto";
 import { KANTO } from "./kanto";
 
 // Our own schematic "tactical" region maps: coastlines, routes and towns drawn from scratch in
@@ -27,6 +28,8 @@ export type MapPlace = {
   /** Label offset from the place, and which way the text runs from there. */
   label: { dx: number; dy: number; anchor?: "start" | "middle" | "end" };
   glyph?: "mountain" | "forest" | "park" | "house";
+  /** Makes the place an arrow off the map's edge that opens a neighbouring region's map. */
+  exit?: { to: RegionId; facing: "east" | "west" };
 };
 
 export type RegionMap = {
@@ -46,4 +49,5 @@ export type RegionMap = {
 
 export const REGION_MAPS: Partial<Record<RegionId, RegionMap>> = {
   kanto: KANTO,
+  johto: JOHTO,
 };
