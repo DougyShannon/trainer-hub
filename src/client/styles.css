@@ -722,3 +722,65 @@ textarea { resize: vertical; font: inherit; }
 .add-to-deck:hover { filter: brightness(1.1); }
 .add-to-deck:disabled { opacity: 0.6; cursor: wait; }
 :root[data-mode="dark"] .add-to-deck { border-radius: calc(6px * var(--round)); box-shadow: 0 0 12px rgb(182 242 58 / 35%); }
+
+/* ----- Battle venues: each gym's table takes its type's colour and pattern ----- */
+[data-venue-type] {
+  --t: #8a8f98;
+  --tp: color-mix(in srgb, var(--t) 22%, transparent);
+  --tp2: color-mix(in srgb, var(--t) 38%, transparent);
+  --mat: none;
+}
+[data-venue-type="normal"] { --t: #9fa19f; --mat: conic-gradient(var(--tp) 25%, transparent 0 50%, var(--tp) 0 75%, transparent 0) 0 0 / 64px 64px; }
+[data-venue-type="fire"] { --t: #e62829; --mat: radial-gradient(ellipse at 50% 115%, var(--tp2), transparent 60%), radial-gradient(circle, var(--tp) 0 2px, transparent 3px) 0 0 / 30px 40px; }
+[data-venue-type="water"] { --t: #2980ef; --mat: repeating-radial-gradient(circle at 50% 130%, transparent 0 20px, var(--tp) 21px 24px); }
+[data-venue-type="electric"] { --t: #d9b000; --mat: linear-gradient(var(--tp) 2px, transparent 2px) 0 0 / 48px 48px, linear-gradient(90deg, var(--tp) 2px, transparent 2px) 0 0 / 48px 48px, radial-gradient(circle, var(--tp2) 0 4px, transparent 5px) -3px -3px / 48px 48px; }
+[data-venue-type="grass"] { --t: #3fa129; --mat: repeating-linear-gradient(135deg, var(--tp) 0 10px, transparent 10px 30px); }
+[data-venue-type="ice"] { --t: #3dcef3; --mat: repeating-linear-gradient(60deg, var(--tp) 0 2px, transparent 2px 40px), repeating-linear-gradient(-60deg, var(--tp) 0 2px, transparent 2px 40px); }
+[data-venue-type="fighting"] { --t: #ff8000; --mat: linear-gradient(90deg, var(--tp2) 3px, transparent 3px) 0 0 / 120px 60px, linear-gradient(var(--tp2) 3px, transparent 3px) 0 0 / 120px 60px; }
+[data-venue-type="poison"] { --t: #9141cb; --mat: radial-gradient(circle, var(--tp) 0 7px, transparent 8px) 0 0 / 40px 40px, radial-gradient(circle, var(--tp) 0 4px, transparent 5px) 20px 20px / 40px 40px; }
+[data-venue-type="ground"] { --t: #915121; --mat: repeating-linear-gradient(0deg, var(--tp) 0 3px, transparent 3px 22px), repeating-linear-gradient(90deg, transparent 0 60px, var(--tp) 60px 62px); }
+[data-venue-type="flying"] { --t: #81b9ef; --mat: radial-gradient(ellipse 140px 44px at 20% 28%, var(--tp2), transparent), radial-gradient(ellipse 180px 54px at 78% 72%, var(--tp2), transparent), radial-gradient(ellipse 110px 36px at 55% 12%, var(--tp), transparent); }
+[data-venue-type="psychic"] { --t: #ef4179; --mat: repeating-radial-gradient(circle at 50% 50%, transparent 0 26px, var(--tp) 27px 29px); }
+[data-venue-type="bug"] { --t: #91a119; --mat: radial-gradient(circle, var(--tp2) 0 3px, transparent 4px) 0 0 / 22px 22px; }
+[data-venue-type="rock"] { --t: #8f865a; --mat: radial-gradient(circle at 30% 30%, var(--tp) 0 16px, transparent 17px) 0 0 / 90px 90px, radial-gradient(circle at 70% 70%, var(--tp2) 0 24px, transparent 25px) 0 0 / 140px 140px; }
+[data-venue-type="ghost"] { --t: #704170; --mat: radial-gradient(ellipse at 25% 20%, var(--tp2), transparent 55%), radial-gradient(ellipse at 80% 85%, var(--tp2), transparent 50%); }
+[data-venue-type="dragon"] { --t: #5060e1; --mat: radial-gradient(circle at 50% 0, transparent 0 14px, var(--tp2) 15px 17px, transparent 18px) 0 0 / 34px 20px; }
+[data-venue-type="dark"] { --t: #50413f; --mat: repeating-linear-gradient(45deg, var(--tp2) 0 2px, transparent 2px 14px); }
+[data-venue-type="steel"] { --t: #60a1b8; --mat: repeating-linear-gradient(90deg, var(--tp) 0 1px, transparent 1px 6px), linear-gradient(180deg, var(--tp), transparent 40%, var(--tp)); }
+[data-venue-type="fairy"] { --t: #ef70ef; --mat: radial-gradient(circle, var(--tp2) 0 2px, transparent 3px) 0 0 / 28px 28px, radial-gradient(circle, var(--tp) 0 1.5px, transparent 2.5px) 14px 14px / 28px 28px; }
+[data-venue-type="league"] { --t: #d4a017; --mat: radial-gradient(ellipse at 50% 50%, transparent 0 34%, var(--tp2) 34.5% 35.5%, transparent 36%), linear-gradient(90deg, transparent calc(50% - 1px), var(--tp2) calc(50% - 1px) calc(50% + 1px), transparent 0); }
+
+.venue-frame { display: grid; gap: 10px; }
+.venue-strip {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--t) 45%, var(--line)); border-left: 4px solid var(--t);
+  border-radius: calc(10px * var(--round));
+  background: var(--mat), linear-gradient(90deg, color-mix(in srgb, var(--t) 22%, var(--surface)), var(--surface) 70%);
+}
+.venue-strip-name { font: 800 18px/1.2 var(--display); }
+.venue-frame .board {
+  background: var(--mat), color-mix(in srgb, var(--t) 10%, var(--surface));
+  border-color: color-mix(in srgb, var(--t) 55%, var(--line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--t) 25%, transparent), 0 0 28px color-mix(in srgb, var(--t) 18%, transparent);
+}
+.venue-frame .waiting-room, .venue-frame .join-table { border-color: color-mix(in srgb, var(--t) 55%, var(--line)); }
+.venue-tag { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.venue-tag::before { content: ""; width: 9px; height: 9px; border-radius: 999px; background: var(--t); box-shadow: 0 0 6px var(--t); }
+
+/* ----- Battle venues page ----- */
+.region-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.region-tabs button { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 6px 14px; cursor: pointer; font-weight: 600; }
+.region-tabs button.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+:root[data-mode="dark"] .region-tabs button { font: 500 13px/1.2 var(--mono); text-transform: uppercase; letter-spacing: 0.06em; border-radius: calc(6px * var(--round)); }
+.region-note { margin-bottom: 16px; }
+.venue-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
+.venue-card {
+  display: grid; grid-template-rows: 84px auto; overflow: hidden; background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--t) 45%, var(--line)); border-radius: calc(14px * var(--round));
+}
+.venue-card-mat { background: var(--mat), color-mix(in srgb, var(--t) 18%, var(--surface)); border-bottom: 3px solid var(--t); }
+.venue-card-body { display: grid; gap: 6px; padding: 12px 14px 14px; align-content: start; }
+.venue-card h2 { font-size: 18px; }
+.venue-card-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+.venue-card-foot .primary-btn { margin-left: auto; }
+.venue-league-badge { background: #d4a017; color: #2a1f00; }

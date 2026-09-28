@@ -181,6 +181,7 @@ export type GameSummary = {
   format: DeckFormat;
   status: "waiting" | "setup" | "playing" | "finished";
   isOpen: boolean;
+  venue: string | null;
   host: GameSeatInfo;
   guest: GameSeatInfo | null;
   winner: string | null;

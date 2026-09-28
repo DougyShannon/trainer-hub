@@ -6,6 +6,7 @@ import { useGameSocket } from "../lib/game";
 import { FORMAT_LABELS } from "../../shared/deck-rules";
 import { ErrorBox, Loading } from "../components/ui";
 import { GameTable } from "../components/GameTable";
+import { VenueFrame } from "../components/Venue";
 import { NotFoundPage } from "./NotFoundPage";
 import { TrainerChip } from "./PlayPage";
 
@@ -29,15 +30,17 @@ export function GamePage() {
   if (info.error) return <ErrorBox message={info.error} />;
   if (!info.data || !view) return <Loading label="Joining the table" />;
 
-  if (view.status === "waiting") {
-    return info.data.role === "host" ? (
-      <WaitingRoom game={info.data} />
-    ) : (
-      <JoinTable game={info.data} loggedIn={!!user} onJoined={() => setSeatKey((k) => k + 1)} />
-    );
-  }
-
-  return <GameTable {...socket} view={view} />;
+  return (
+    <VenueFrame id={info.data.venue}>
+      {view.status !== "waiting" ? (
+        <GameTable {...socket} view={view} />
+      ) : info.data.role === "host" ? (
+        <WaitingRoom game={info.data} />
+      ) : (
+        <JoinTable game={info.data} loggedIn={!!user} onJoined={() => setSeatKey((k) => k + 1)} />
+      )}
+    </VenueFrame>
+  );
 }
 
 function WaitingRoom({ game }: { game: GameInfo }) {

@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { venueById } from "../../shared/venues";
 import type { AppEnv, User } from "../types";
 import { requireUser } from "../lib/auth";
 import { parseJson } from "../lib/json";
@@ -67,7 +68,7 @@ async function deckForTable(db: D1Database, user: User, deckId: unknown) {
 }
 
 const GAME_COLUMNS = `
-  g.id, g.format, g.status, g.is_open, g.host_deck_name, g.guest_deck_name, g.end_reason, g.turns,
+  g.id, g.format, g.status, g.is_open, g.venue, g.host_deck_name, g.guest_deck_name, g.end_reason, g.turns,
   g.created_at, g.started_at, g.finished_at,
   h.trainer_name AS host_name, h.avatar_dex AS host_avatar,
   gu.trainer_name AS guest_name, gu.avatar_dex AS guest_avatar,
@@ -82,6 +83,7 @@ export const gameSummary = (r: Record<string, unknown>) => ({
   format: r.format as string,
   status: r.status as string,
   isOpen: !!r.is_open,
+  venue: (r.venue as string | null) ?? null,
   host: { trainerName: r.host_name as string, avatarDex: r.host_avatar as number, deckName: r.host_deck_name as string },
   guest: r.guest_name
     ? { trainerName: r.guest_name as string, avatarDex: r.guest_avatar as number, deckName: r.guest_deck_name as string }
@@ -141,8 +143,8 @@ games.post("/api/games", requireUser, async (c) => {
   if ((waiting?.n ?? 0) >= 3) return c.json({ error: "You already have 3 tables waiting. Close one first." }, 400);
 
   const id = newGameId();
-  await c.env.DB.prepare(`INSERT INTO games (id, format, is_open, host_user_id, host_deck_name) VALUES (?, ?, ?, ?, ?)`)
-    .bind(id, deck.format, body.isOpen === false ? 0 : 1, user.id, deck.player.deckName)
+  await c.env.DB.prepare(`INSERT INTO games (id, format, is_open, venue, host_user_id, host_deck_name) VALUES (?, ?, ?, ?, ?, ?)`)
+    .bind(id, deck.format, body.isOpen === false ? 0 : 1, venueById(body.venue)?.id ?? null, user.id, deck.player.deckName)
     .run();
   await room(c.env, id).create(id, deck.format, deck.player);
   return c.json({ id }, 201);
