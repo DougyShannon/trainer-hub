@@ -2,6 +2,27 @@ import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { useAuth } from "../lib/auth";
 import { sprite } from "../lib/sprites";
+import { getTheme, setTheme, type Theme } from "../lib/theme";
+import { Assistant } from "./Assistant";
+
+function ThemePicker() {
+  const [theme, setLocal] = useState<Theme>(getTheme);
+  useEffect(() => {
+    const sync = () => setLocal(getTheme());
+    window.addEventListener("trainer-hub:theme", sync);
+    return () => window.removeEventListener("trainer-hub:theme", sync);
+  }, []);
+  return (
+    <label className="theme-picker">
+      Theme{" "}
+      <select value={theme} onChange={(e) => setTheme(e.target.value as Theme)}>
+        <option value="system">Match my device</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+    </label>
+  );
+}
 
 function AccountMenu() {
   const { user, ready, logout } = useAuth();
@@ -90,6 +111,7 @@ export function Layout() {
       <main className="site-main">
         <Outlet />
       </main>
+      <Assistant />
       <footer className="site-footer">
         <p>
           Trainer Hub is an unofficial fan site. Pokémon and all related names and images are trademarks of Nintendo,
@@ -99,6 +121,7 @@ export function Layout() {
           Card data from <a href="https://pokemontcg.io/">pokemontcg.io</a>. Pokémon data and sprites from{" "}
           <a href="https://pokeapi.co/">PokeAPI</a>.
         </p>
+        <ThemePicker />
       </footer>
     </div>
   );

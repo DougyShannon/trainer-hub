@@ -51,11 +51,21 @@ The **Deploy** GitHub Action publishes the site every time `main` changes.
 
 The site appears at `https://trainer-hub.<your-subdomain>.workers.dev`. Run the workflow with the box ticked again whenever a new card set comes out.
 
+## Switching on the assistant
+
+Professor Hub, the chat assistant in the corner of every page, runs on Claude. It stays switched off (and says so) until it has an API key:
+
+1. Create a key at [console.anthropic.com](https://console.anthropic.com) under **API Keys**, and add some credit under **Billing**.
+2. In Cloudflare, open **Workers & Pages → trainer-hub → Settings → Variables and Secrets**, click **Add**, choose type **Secret**, name it `ANTHROPIC_API_KEY` and paste the key.
+
+Each trainer can ask 40 questions a day. Trainers named in `ADMIN_TRAINERS` in `wrangler.jsonc` have no limit and can see the site change requests other trainers make, at `/admin/requests`. To try it locally without a key, point `ANTHROPIC_BASE_URL` in `.dev.vars` at a stand-in server.
+
 ## Project layout
 
 - `src/worker/` is the server code: the `/api/...` routes. `routes/reference.ts` serves cards and Pokémon, `routes/accounts.ts` handles sign-up, log-in and profiles, and `routes/decks.ts` saves and imports decks.
 - `src/worker/routes/games.ts` opens, lists and joins games. Each game runs in its own `GameRoom` Durable Object (`src/worker/game/room.ts`), which players and spectators connect to over a WebSocket.
 - `src/worker/game/engine.ts` is the game table: zones, turns, prizes, coin flips and what each player is allowed to see. Moves are made by the players, like on a real play mat; card text isn't enforced.
+- `src/worker/routes/assistant.ts` runs the assistant: it sends the question to Claude with a guide to the site and the trainer's saved notes, and runs the tools Claude asks for (`src/worker/assistant/tools.ts`): card search, deck checking and saving, profile changes, notes, opening pages and switching the theme. The chat panel is `src/client/components/Assistant.tsx`, which also handles the microphone and reading answers aloud.
 - `src/shared/deck-rules.ts` holds the 60-card deck rules, used by both the deck builder and the server. `src/shared/game-types.ts` holds the game types shared by the server and the table.
 - `src/client/` is the website itself (React).
 - `migrations/` holds the database tables.
