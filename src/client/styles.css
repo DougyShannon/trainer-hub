@@ -784,3 +784,56 @@ textarea { resize: vertical; font: inherit; }
 .venue-card-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
 .venue-card-foot .primary-btn { margin-left: auto; }
 .venue-league-badge { background: #d4a017; color: #2a1f00; }
+
+/* ----- Practice play ----- */
+.practice-callout { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; margin-bottom: 16px; }
+.practice-callout h2 { margin: 0 0 4px; }
+.practice-callout-aces { display: grid; grid-template-columns: repeat(4, 40px); gap: 0; }
+.practice-callout-aces img { width: 40px; height: 40px; image-rendering: pixelated; }
+@media (max-width: 640px) {
+  .practice-callout { grid-template-columns: 1fr; }
+  .practice-callout-aces { grid-template-columns: repeat(8, 36px); }
+  .practice-callout-aces img { width: 36px; height: 36px; }
+}
+.badge-case { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.badge-slot { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); border: 2px dashed var(--line); }
+.badge-slot img { width: 40px; height: 40px; image-rendering: pixelated; filter: grayscale(1) brightness(0.6); opacity: 0.45; }
+.badge-slot.earned { border: 2px solid var(--gold); background: color-mix(in srgb, var(--gold) 18%, var(--surface)); box-shadow: 0 0 10px color-mix(in srgb, var(--gold) 35%, transparent); }
+.badge-slot.earned img { filter: none; opacity: 1; }
+.practice-setup { margin-bottom: 16px; }
+.practice-setup .field { max-width: 420px; }
+.practice-warn { color: var(--gold); }
+.ladder { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.ladder-rung { grid-template-rows: 56px auto; }
+.ladder-rung.locked { opacity: 0.55; }
+.ladder-body { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 4px 12px; padding: 0 14px 14px; }
+.ladder-ace { margin-top: -36px; image-rendering: pixelated; background: var(--surface); border: 2px solid var(--t); border-radius: 50%; }
+.ladder-text { display: grid; gap: 3px; padding-top: 8px; }
+.ladder-text h2 { font-size: 20px; margin: 0; }
+.ladder-foot { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+.ladder-foot .primary-btn, .ladder-foot > .muted:last-child { margin-left: auto; }
+.ladder-badge { font-size: 12px; font-weight: 700; color: var(--gold); border: 1px solid var(--gold); border-radius: 999px; padding: 2px 8px; }
+
+.turn-pill.thinking { background: var(--surface-2); color: var(--muted); animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.55; } }
+@media (prefers-reduced-motion: reduce) { .turn-pill.thinking { animation: none; } }
+.turn-checklist { margin: 0; padding-left: 18px; display: grid; gap: 2px; }
+.turn-checklist li.done { color: var(--muted); text-decoration: line-through; }
+.practice-info { display: grid; gap: 8px; }
+.practice-info p { margin: 0; }
+.practice-attack { display: grid; gap: 4px; padding: 8px; border: 1px solid var(--line); border-radius: calc(8px * var(--round)); background: var(--surface-2); }
+.practice-attack.ready { border-color: var(--accent); }
+.practice-attack.ability { background: none; border-style: dashed; }
+.practice-attack-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.practice-dmg { margin-left: auto; font: 700 16px var(--mono); }
+.practice-attack button { justify-self: start; }
+.att.tool { background: var(--accent-soft); }
+.hand-card { position: relative; flex: none; display: grid; justify-items: center; }
+.hand-card.dim { opacity: 0.5; }
+.hand-role { position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%); background: var(--gold); color: #1d1500; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 1px 8px; }
+.choice-card.dim { opacity: 0.4; }
+.choice-slots { display: flex; flex-wrap: wrap; gap: 14px; }
+.choice-slot { display: grid; justify-items: center; gap: 4px; }
+.practice .modal .gcard { --cw: 92px; }
+.practice-result { font-size: 15px; }
+.choice-peek { position: fixed; left: 12px; right: 12px; bottom: 12px; top: auto; z-index: 45; max-width: 760px; margin: 0 auto; }

@@ -7,6 +7,7 @@ import { FORMAT_LABELS } from "../../shared/deck-rules";
 import { Loading } from "../components/ui";
 import { VenueSelect, VenueTag } from "../components/Venue";
 import { venueById } from "../../shared/venues";
+import { OPPONENTS } from "../../shared/practice/opponents";
 
 /** Re-fetches lobby lists every few seconds so new tables show up without a refresh. */
 function useTicker(ms: number) {
@@ -94,6 +95,24 @@ export function PlayPage() {
           Battle venues
         </Link>
       </div>
+
+      <section className="panel practice-callout">
+        <div className="practice-callout-aces" aria-hidden="true">
+          {OPPONENTS.slice(0, 8).map((o) => (
+            <img key={o.level} src={sprite(o.ace)} alt="" width={48} height={48} />
+          ))}
+        </div>
+        <div>
+          <h2>Practice play</h2>
+          <p className="muted small">
+            No one around? Battle the computer on the Kanto Gym ladder: 8 Gym Leaders, then the Elite Four and the
+            Champion, each tougher than the last. The rules are handled for you.
+          </p>
+        </div>
+        <Link to="/play/practice" className="primary-btn">
+          Practice play
+        </Link>
+      </section>
 
       <div className="play-grid">
         <section className="panel">

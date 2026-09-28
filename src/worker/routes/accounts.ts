@@ -195,6 +195,10 @@ accounts.get("/api/trainers/:name", async (c) => {
     .bind(user.id)
     .all<Record<string, unknown>>();
 
+  const badges = await c.env.DB.prepare(`SELECT level FROM practice_results WHERE user_id = ? AND wins > 0 ORDER BY level`)
+    .bind(user.id)
+    .all<{ level: number }>();
+
   const played = record?.played ?? 0;
   const wins = record?.wins ?? 0;
   return c.json({
@@ -202,6 +206,7 @@ accounts.get("/api/trainers/:name", async (c) => {
     isMe,
     decks: results.map((r) => ({ ...deckSummary(r), coverImage: covers.get(r.cover_card_id as string)?.image ?? null })),
     record: { played, wins, losses: played - wins },
+    badges: badges.results.map((r) => r.level),
     recentGames: recent.results.map((r) => ({
       id: r.id as string,
       won: r.winner_user_id === user.id,

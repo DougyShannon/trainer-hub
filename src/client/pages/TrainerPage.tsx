@@ -5,6 +5,7 @@ import { DeckTile } from "../components/DeckTile";
 import { ErrorBox, Loading } from "../components/ui";
 import { NotFoundPage } from "./NotFoundPage";
 import { timeAgo } from "./PlayPage";
+import { OPPONENTS } from "../../shared/practice/opponents";
 
 type Profile = {
   trainer: Trainer;
@@ -12,6 +13,8 @@ type Profile = {
   decks: (DeckSummary & { coverImage?: string | null })[];
   record: { played: number; wins: number; losses: number };
   recentGames: RecentGame[];
+  /** Practice ladder levels this trainer has beaten. */
+  badges: number[];
 };
 
 export function TrainerPage() {
@@ -24,6 +27,7 @@ export function TrainerPage() {
   if (error || !data) return <ErrorBox message={error ?? "Unknown error"} />;
 
   const { trainer, isMe, decks, record, recentGames } = data;
+  const badges = OPPONENTS.filter((o) => data.badges?.includes(o.level));
   const favourite = pokemon.data?.find((p) => p.id === trainer.favouriteDex);
   const joined = new Date(trainer.createdAt.replace(" ", "T") + "Z").toLocaleDateString(undefined, { month: "long", year: "numeric" });
 
@@ -63,6 +67,18 @@ export function TrainerPage() {
               </dd>
             </div>
           </dl>
+          {(badges.length > 0 || isMe) && (
+            <div className="badge-case" aria-label="Practice badges">
+              {OPPONENTS.map((o) => (
+                <span key={o.level} className={`badge-slot${badges.includes(o) ? " earned" : ""}`} title={badges.includes(o) ? o.badge : `${o.badge} (not yet earned)`}>
+                  <img src={sprite(o.ace)} alt="" width={40} height={40} />
+                </span>
+              ))}
+              <Link to="/play/practice" className="small">
+                {badges.length} of {OPPONENTS.length} practice badges
+              </Link>
+            </div>
+          )}
           {isMe && (
             <div className="row-actions">
               <Link to="/me/settings" className="secondary-btn">

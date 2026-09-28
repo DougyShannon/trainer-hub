@@ -820,7 +820,7 @@ function ActionPanel({
   );
 }
 
-function CardPreview({ card }: { card: CardRef }) {
+export function CardPreview({ card }: { card: CardRef }) {
   const [broken, setBroken] = useState(false);
   const src = card.imageLarge ?? card.image;
   return (

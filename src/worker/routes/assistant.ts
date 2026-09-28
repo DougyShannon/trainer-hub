@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv, User } from "../types";
-import { requireUser } from "../lib/auth";
+import { isAdmin, requireUser } from "../lib/auth";
 import { STATUS, TOOLS, loadNotes, runTool, type ClientAction, type ToolContext } from "../assistant/tools";
 
 export const assistant = new Hono<AppEnv>();
@@ -10,13 +10,6 @@ const DAILY_LIMIT = 40; // messages per trainer per day, to keep the AI bill sma
 const MAX_STEPS = 10; // tool rounds per question
 const MAX_HISTORY = 20;
 
-const isAdmin = (env: AppEnv["Bindings"], user: User | null) =>
-  !!user &&
-  (env.ADMIN_TRAINERS ?? "")
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean)
-    .includes(user.trainerName.toLowerCase());
 
 const SITE_GUIDE = `You are Professor Hub, the friendly assistant on Trainer Hub, an unofficial fan-made Pokémon Trading Card Game website. You help trainers with the site, the TCG and Pokémon in general.
 
