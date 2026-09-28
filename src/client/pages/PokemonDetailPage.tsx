@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router";
 import { useApi, type PokemonDetail } from "../lib/api";
 import { animatedSprite, artwork, cry, dexNumber, shinyArtwork, sprite } from "../lib/sprites";
 import { CardThumb, ErrorBox, GAME_TYPES, Loading, TypeBadge } from "../components/ui";
+import { AddToDeckButton, DeckTarget } from "../components/AddToDeck";
 import typeChart from "../../shared/type-chart.json";
 import { NotFoundPage } from "./NotFoundPage";
 
@@ -212,11 +213,16 @@ export function PokemonDetailPage() {
           {p.name} TCG cards <span className="muted">({p.cards.length})</span>
         </h2>
         {p.cards.length ? (
-          <div className="card-grid small">
-            {(showAllCards ? p.cards : p.cards.slice(0, 21)).map((c) => (
-              <CardThumb key={c.id} card={c} />
-            ))}
-          </div>
+          <DeckTarget>
+            <div className="card-grid small">
+              {(showAllCards ? p.cards : p.cards.slice(0, 21)).map((c) => (
+                <div key={c.id} className="card-slot">
+                  <CardThumb card={c} />
+                  <AddToDeckButton card={c} />
+                </div>
+              ))}
+            </div>
+          </DeckTarget>
         ) : (
           <p className="muted">No cards of {p.name} have been printed yet.</p>
         )}
