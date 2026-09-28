@@ -468,7 +468,7 @@ textarea { resize: vertical; font: inherit; }
 .banner-actions { margin-left: auto; display: flex; gap: 8px; }
 .banner .link-btn { padding: 0; }
 
-.table-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; align-items: start; }
+.table-layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 14px; align-items: start; }
 .board { display: grid; gap: 8px; background: linear-gradient(180deg, #2d6a4f22, #2748a822); border: 1px solid var(--line); border-radius: calc(16px * var(--round)); padding: 12px; }
 .side { display: grid; gap: 8px; }
 .side.waiting { min-height: 180px; place-items: center; color: var(--muted); }
@@ -941,3 +941,30 @@ textarea { resize: vertical; font: inherit; }
 .practice .modal .gcard { --cw: 92px; }
 .practice-result { font-size: 15px; }
 .choice-peek { position: fixed; left: 12px; right: 12px; bottom: 12px; top: auto; z-index: 45; max-width: 760px; margin: 0 auto; }
+
+/* ----- Game tables: hover zoom, card details, turn guide ----- */
+.card-zoom { position: fixed; z-index: 70; pointer-events: none; border-radius: 14px; overflow: hidden; box-shadow: 0 12px 40px rgb(0 0 0 / 35%); background: var(--surface-2); }
+.card-zoom img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.card-summary { display: grid; gap: 3px; }
+.card-summary-hp { display: flex; align-items: center; gap: 6px; font-size: 15px; }
+.how-to { margin: 0; padding: 8px 10px; background: var(--accent-soft); border-radius: calc(8px * var(--round)); }
+.card-text { display: grid; gap: 6px; }
+.card-text-head { font-size: 14px; margin-top: 2px; }
+.card-rule { margin: 0; padding: 6px 8px; border-left: 3px solid var(--gold); background: var(--surface-2); }
+.wrr.compact { gap: 6px; }
+.wrr.compact div { padding: 6px 8px; }
+.wrr.compact dd { font-size: 13px; }
+.turn-guide { background: var(--surface); border: 1px solid var(--line); border-radius: calc(14px * var(--round)); padding: 12px; display: grid; gap: 8px; }
+.turn-guide p { margin: 0; }
+.turn-guide-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; background: none; border: 0; padding: 0; color: var(--ink); font: inherit; cursor: pointer; text-align: left; }
+.guide-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.guide-row { display: grid; gap: 2px; padding: 7px 9px; border-radius: calc(8px * var(--round)); border: 1px solid var(--line); border-left: 4px solid var(--line); }
+.guide-row.g-ready { border-left-color: var(--ok); }
+.guide-row.g-done { opacity: 0.6; }
+.guide-row.g-blocked strong { color: var(--muted); }
+.guide-row.g-info { background: var(--surface-2); }
+.guide-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 14px; }
+.guide-mark { flex: none; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 1px 8px; background: var(--surface-2); color: var(--muted); }
+.guide-mark.m-ready { background: var(--ok-soft); color: var(--ok); }
+.guide-show { justify-self: start; padding: 0; font-size: 13px; }
+@media (max-width: 640px) { .wrr.compact { grid-template-columns: repeat(3, 1fr); } }

@@ -17,6 +17,9 @@ import {
 } from "../../shared/game-types";
 import { sprite } from "../lib/sprites";
 import type { Connection } from "../lib/game";
+import { CardSummary, CardText, useCardDetail } from "./CardFacts";
+import { CardZoom, zoomHandlers } from "./CardZoom";
+import { TurnGuide, type GuideRow } from "./TurnGuide";
 
 type Pile = "hand" | "discard" | "lostZone" | "deck" | "attached" | "stadium" | "evolution";
 
@@ -71,12 +74,13 @@ export function GameCard({
     <span className="gcard-back-mark" aria-hidden="true" />
   );
   const aria = label ?? (card ? card.name : "Face-down card");
+  const zoom = zoomHandlers(card);
   return onClick ? (
-    <button type="button" className={cls} onClick={onClick} aria-label={aria} aria-pressed={selected}>
+    <button type="button" className={cls} onClick={onClick} aria-label={aria} aria-pressed={selected} {...zoom}>
       {body}
     </button>
   ) : (
-    <span className={cls} role="img" aria-label={aria}>
+    <span className={cls} role="img" aria-label={aria} {...zoom}>
       {body}
     </span>
   );
@@ -418,6 +422,17 @@ export function GameTable({
             }}
             clear={() => setSel(null)}
           />
+          {view.you && view.status === "playing" && (
+            myTurn ? (
+              <TurnGuide
+                title="Your turn: what you can do"
+                intro="This table doesn't enforce the rules, so you move the cards. Here's how to do each thing."
+                rows={liveGuide(mine, view.turn, () => setSel({ kind: "slot", side: me, ref: { zone: "active" } }))}
+              />
+            ) : (
+              <p className="action-panel idle muted small">When it's your turn, everything you can do (and how) is listed here.</p>
+            )
+          )}
           <GameLog view={view} act={act} canChat={view.you !== null} />
         </aside>
       </div>
@@ -427,6 +442,8 @@ export function GameTable({
           {error}
         </div>
       )}
+
+      <CardZoom />
 
       {pile && (
         <PileModal
@@ -566,6 +583,74 @@ function Side({
   return <div className={`side${flipped ? " flipped" : ""}`}>{flipped ? <>{bench}{active}</> : <>{active}{bench}</>}</div>;
 }
 
+/** Every option in a turn on the manual table, from what's in your hand and on your mat. */
+function liveGuide(p: PlayerView, turn: number, openActive: () => void): GuideRow[] {
+  const hand = p.hand ?? [];
+  const has = (test: (c: CardRef) => boolean) => hand.some(test);
+  const benchFull = p.bench.length >= BENCH_SIZE;
+  const firstTurns = turn <= 2;
+  const trainer = (sub: string) => (c: CardRef) => c.supertype === "Trainer" && c.subtypes.includes(sub);
+  return [
+    { what: "Draw a card", how: "Done for you at the start of each turn.", state: "info" },
+    {
+      what: "Put Basic Pokémon on your Bench",
+      how: "Tap a Basic Pokémon in your hand, then press Put on your Bench.",
+      state: has(isBasicPokemon) && !benchFull ? "ready" : "blocked",
+      note: benchFull ? "Your Bench is full (5)." : !has(isBasicPokemon) ? "No Basic Pokémon in your hand." : "As many as you like.",
+    },
+    {
+      what: "Evolve a Pokémon",
+      how: "Tap the Evolution card in your hand, press Evolve a Pokémon…, then tap the Pokémon it evolves from.",
+      state: has((c) => isPokemon(c) && !isBasicPokemon(c)) && !firstTurns ? "ready" : "blocked",
+      note: firstTurns ? "Nobody can evolve on their first turn." : !has((c) => isPokemon(c) && !isBasicPokemon(c)) ? "No Evolution cards in your hand." : "Not a Pokémon that came into play this turn.",
+    },
+    {
+      what: "Attach 1 Energy",
+      how: "Tap an Energy card in your hand, press Attach to a Pokémon…, then tap the Pokémon.",
+      state: has((c) => c.supertype === "Energy") ? "ready" : "blocked",
+      note: has((c) => c.supertype === "Energy") ? "Once per turn." : "No Energy in your hand.",
+    },
+    {
+      what: "Play Items and Tools",
+      how: "Tap the card, do what it says, then press Play / discard (Tools: Attach to a Pokémon…).",
+      state: has(trainer("Item")) || has(trainer("Pokémon Tool")) ? "ready" : "blocked",
+      note: has(trainer("Item")) || has(trainer("Pokémon Tool")) ? "As many as you like." : "None in your hand.",
+    },
+    {
+      what: "Play 1 Supporter",
+      how: "Tap the Supporter, do what it says, then press Play / discard.",
+      state: has(trainer("Supporter")) && turn !== 1 ? "ready" : "blocked",
+      note: turn === 1 ? "The player who goes first can't play one on turn 1." : has(trainer("Supporter")) ? "Once per turn." : "No Supporter in your hand.",
+    },
+    {
+      what: "Play a Stadium",
+      how: "Tap the Stadium in your hand, then press Play Stadium.",
+      state: has(trainer("Stadium")) ? "ready" : "blocked",
+      note: has(trainer("Stadium")) ? "Once per turn." : "No Stadium in your hand.",
+    },
+    {
+      what: "Retreat",
+      how: "Tap your Active Pokémon, press Retreat / switch…, pick a Benched Pokémon, then discard Energy from the old Active equal to its Retreat cost.",
+      state: p.active && p.bench.length ? "ready" : "blocked",
+      note: p.active && p.bench.length ? "Once per turn. Not while Asleep or Paralyzed." : "You need a Pokémon on your Bench to switch in.",
+      show: { label: "Show my Active Pokémon", run: openActive },
+    },
+    {
+      what: "Attack (ends your turn)",
+      how: "Tap your Active Pokémon and read its attacks. If it has the Energy an attack needs, tap your opponent's Active and add the damage (x2 if they're weak to your type), then press End turn.",
+      state: p.active && turn !== 1 ? "ready" : "blocked",
+      note: turn === 1 ? "The player who goes first can't attack on turn 1." : !p.active ? "You have no Active Pokémon." : null,
+      show: { label: "Show my Active Pokémon", run: openActive },
+    },
+    {
+      what: "Take a Prize card",
+      how: "When you Knock Out a Pokémon, tap your Prizes and press Take a Prize card (2 for a Pokémon ex).",
+      state: "info",
+    },
+    { what: "End your turn", how: "Press End turn at the top of the table.", state: "info" },
+  ];
+}
+
 function SetupBanner({ view, me, act }: { view: GameView; me: PlayerView; act: (a: GameAction) => void }) {
   const hasBasic = me.hand?.some(isBasicPokemon) || !!me.active || me.bench.length > 0;
   const opp = view.players[otherSeat(view.you!)];
@@ -626,6 +711,7 @@ function ActionPanel({
   let preview: CardRef | null = null;
   let title = "";
   let body: ReactNode = null;
+  let how: string | null = null;
 
   if (!sel) {
     return (
@@ -669,6 +755,7 @@ function ActionPanel({
     preview = card;
     title = card.name;
     const own = sel.side === me && isPlayer;
+    if (own && from === "hand") how = setup ? (isBasicPokemon(card) ? SETUP_HOW : "Only Basic Pokémon can go into play while you set up.") : howToPlay(card);
     if (own) {
       if (setup) {
         if (from === "hand" && isBasicPokemon(card)) {
@@ -709,6 +796,13 @@ function ActionPanel({
     title = `${top.name}${top.hp ? ` · ${Math.max(0, top.hp - slot.damage)}/${top.hp} HP` : ""}`;
     const own = sel.side === me && isPlayer;
     const canMark = isPlayer && view.status === "playing";
+    if (canMark) {
+      how = !own
+        ? "After you attack, add the damage to this Pokémon with the +10 / +30 / +50 buttons. If its damage reaches its HP it's Knocked Out: your opponent presses Knocked Out, and you take a Prize card."
+        : sel.ref.zone === "active"
+          ? "To attack: check the Energy attached matches an attack's cost (below), tap your opponent's Active Pokémon and add the damage, then press End turn. To retreat: press Retreat / switch…, pick a Benched Pokémon, then tap this one on the Bench and press Discard next to Energy equal to its Retreat cost."
+          : "Press Switch with Active to swap it in (for example after your Active is Knocked Out, or when a card lets you switch).";
+    }
     const ref = sel.ref;
 
     body = (
@@ -788,6 +882,42 @@ function ActionPanel({
     }
   }
 
+  return <CardPanel title={title} preview={preview} body={body} how={how} buttons={buttons} clear={clear} />;
+}
+
+const SETUP_HOW = "Press Make it your Active Pokémon, or Put it on your Bench. Press Ready at the top when you're done.";
+
+/** Which buttons to press to play a card from your hand on the manual table. */
+function howToPlay(card: CardRef): string {
+  const sub = card.subtypes;
+  if (isBasicPokemon(card)) return "Press Put on your Bench. You can have up to 5 Pokémon on your Bench.";
+  if (isPokemon(card))
+    return "Press Evolve a Pokémon…, then tap the Pokémon it evolves from on your mat. You can't evolve on your first turn, or evolve a Pokémon that came into play this turn.";
+  if (card.supertype === "Energy") return "Press Attach to a Pokémon…, then tap the Pokémon. You can attach 1 Energy from your hand each turn.";
+  if (sub.includes("Pokémon Tool")) return "Press Attach to a Pokémon…, then tap the Pokémon. Each Pokémon can hold 1 Tool.";
+  if (sub.includes("Stadium")) return "Press Play Stadium. It stays in play for both players until another Stadium replaces it. 1 Stadium per turn.";
+  if (sub.includes("Supporter"))
+    return "Do what the card says (for example, tap your Deck and press Draw a card), then press Play / discard. Only 1 Supporter per turn, and the player who goes first can't play one on their first turn.";
+  return "Do what the card says (for example, tap your Deck and press Search deck), then press Play / discard. You can play as many Items as you like.";
+}
+
+/** The side panel for one card: big picture, its buttons, how to use it and its full text. */
+function CardPanel({
+  title,
+  preview,
+  body,
+  how,
+  buttons,
+  clear,
+}: {
+  title: string;
+  preview: CardRef | null;
+  body: ReactNode;
+  how: string | null;
+  buttons: { label: string; run: () => void; primary?: boolean }[];
+  clear: () => void;
+}) {
+  const detail = useCardDetail(preview?.cardId ?? null);
   return (
     <div className="action-panel">
       <div className="action-head">
@@ -799,7 +929,7 @@ function ActionPanel({
       <div className="action-body">
         {preview && <CardPreview card={preview} />}
         <div className="action-controls">
-          {body}
+          {preview && <CardSummary card={preview} detail={detail} />}
           {buttons.length > 0 && (
             <div className="action-buttons">
               {buttons.map((b) => (
@@ -809,13 +939,15 @@ function ActionPanel({
               ))}
             </div>
           )}
-          {preview && (
-            <Link to={`/cards/${preview.cardId}`} target="_blank" rel="noreferrer" className="small">
-              Card details
-            </Link>
-          )}
         </div>
       </div>
+      {how && (
+        <p className="how-to small">
+          <strong>How to:</strong> {how}
+        </p>
+      )}
+      {body}
+      {preview && <CardText detail={detail} />}
     </div>
   );
 }
