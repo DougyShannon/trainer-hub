@@ -17,6 +17,8 @@ A fan-made site for playing the Pokémon Trading Card Game online with other peo
 | My decks | `/decks` |
 | Deck builder | `/decks/new`, `/decks/:id/edit` |
 | Deck page | `/decks/:id` (shareable when the deck is public) |
+| Play lobby | `/play` (open a table, join one, or watch a game) |
+| Game table | `/play/:id` (the link you send to an opponent) |
 
 ## Where the data comes from
 
@@ -51,7 +53,9 @@ The site appears at `https://trainer-hub.<your-subdomain>.workers.dev`. Run the 
 ## Project layout
 
 - `src/worker/` is the server code: the `/api/...` routes. `routes/reference.ts` serves cards and Pokémon, `routes/accounts.ts` handles sign-up, log-in and profiles, and `routes/decks.ts` saves and imports decks.
-- `src/shared/deck-rules.ts` holds the 60-card deck rules, used by both the deck builder and the server.
+- `src/worker/routes/games.ts` opens, lists and joins games. Each game runs in its own `GameRoom` Durable Object (`src/worker/game/room.ts`), which players and spectators connect to over a WebSocket.
+- `src/worker/game/engine.ts` is the game table: zones, turns, prizes, coin flips and what each player is allowed to see. Moves are made by the players, like on a real play mat; card text isn't enforced.
+- `src/shared/deck-rules.ts` holds the 60-card deck rules, used by both the deck builder and the server. `src/shared/game-types.ts` holds the game types shared by the server and the table.
 - `src/client/` is the website itself (React).
 - `migrations/` holds the database tables.
 - `scripts/` holds the data download and loading scripts.

@@ -177,9 +177,40 @@ accounts.get("/api/trainers/:name", async (c) => {
     .all<Record<string, unknown>>();
 
   const covers = await cardsById(c.env.DB, results.map((r) => r.cover_card_id as string).filter(Boolean));
+
+  const record = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS played, COALESCE(SUM(winner_user_id = ?), 0) AS wins
+     FROM games WHERE status = 'finished' AND (host_user_id = ? OR guest_user_id = ?)`,
+  )
+    .bind(user.id, user.id, user.id)
+    .first<{ played: number; wins: number }>();
+  const recent = await c.env.DB.prepare(
+    `SELECT g.id, g.finished_at, g.turns, g.end_reason, g.winner_user_id,
+       CASE WHEN g.host_user_id = ?1 THEN g.host_deck_name ELSE g.guest_deck_name END AS deck_name,
+       o.trainer_name AS opponent, o.avatar_dex AS opponent_avatar
+     FROM games g LEFT JOIN users o ON o.id = CASE WHEN g.host_user_id = ?1 THEN g.guest_user_id ELSE g.host_user_id END
+     WHERE g.status = 'finished' AND (g.host_user_id = ?1 OR g.guest_user_id = ?1)
+     ORDER BY g.finished_at DESC LIMIT 10`,
+  )
+    .bind(user.id)
+    .all<Record<string, unknown>>();
+
+  const played = record?.played ?? 0;
+  const wins = record?.wins ?? 0;
   return c.json({
     trainer: publicUser(user),
     isMe,
     decks: results.map((r) => ({ ...deckSummary(r), coverImage: covers.get(r.cover_card_id as string)?.image ?? null })),
+    record: { played, wins, losses: played - wins },
+    recentGames: recent.results.map((r) => ({
+      id: r.id as string,
+      won: r.winner_user_id === user.id,
+      opponent: (r.opponent as string | null) ?? "A former trainer",
+      opponentAvatar: (r.opponent_avatar as number | null) ?? null,
+      deckName: r.deck_name as string,
+      turns: r.turns as number,
+      endReason: r.end_reason as string | null,
+      finishedAt: r.finished_at as string,
+    })),
   });
 });

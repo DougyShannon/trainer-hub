@@ -1,3 +1,5 @@
+import type { GameRoom } from "./game/room";
+
 export type User = {
   id: number;
   email: string;
@@ -10,6 +12,6 @@ export type User = {
 };
 
 export type AppEnv = {
-  Bindings: { DB: D1Database };
+  Bindings: { DB: D1Database; GAME_ROOM: DurableObjectNamespace<GameRoom> };
   Variables: { user: User | null };
 };

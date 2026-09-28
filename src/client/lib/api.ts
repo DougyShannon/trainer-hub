@@ -173,3 +173,32 @@ export function useApi<T>(url: string | null, { fresh = false, reloadKey = 0 } =
 
   return { ...state, reload: () => setBump((n) => n + 1) };
 }
+
+export type GameSeatInfo = { trainerName: string; avatarDex: number; deckName: string };
+
+export type GameSummary = {
+  id: string;
+  format: DeckFormat;
+  status: "waiting" | "setup" | "playing" | "finished";
+  isOpen: boolean;
+  host: GameSeatInfo;
+  guest: GameSeatInfo | null;
+  winner: string | null;
+  endReason: string | null;
+  turns: number;
+  createdAt: string;
+  finishedAt: string | null;
+};
+
+export type GameInfo = GameSummary & { role: "host" | "guest" | "viewer" };
+
+export type RecentGame = {
+  id: string;
+  won: boolean;
+  opponent: string;
+  opponentAvatar: number | null;
+  deckName: string;
+  turns: number;
+  endReason: string | null;
+  finishedAt: string;
+};

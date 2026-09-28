@@ -4,6 +4,7 @@ import { jsonOnlyWrites, loadUser } from "./lib/auth";
 import { reference } from "./routes/reference";
 import { accounts } from "./routes/accounts";
 import { decks } from "./routes/decks";
+import { games } from "./routes/games";
 
 const app = new Hono<AppEnv>();
 
@@ -13,6 +14,7 @@ app.use("/api/*", loadUser);
 app.route("/", reference);
 app.route("/", accounts);
 app.route("/", decks);
+app.route("/", games);
 
 app.notFound((c) => c.json({ error: "Not found" }, 404));
 app.onError((err, c) => {
@@ -21,3 +23,4 @@ app.onError((err, c) => {
 });
 
 export default app;
+export { GameRoom } from "./game/room";

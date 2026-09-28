@@ -1,11 +1,18 @@
 import { Link, useParams } from "react-router";
-import { useApi, type DeckSummary, type PokemonSummary, type Trainer } from "../lib/api";
+import { useApi, type DeckSummary, type PokemonSummary, type RecentGame, type Trainer } from "../lib/api";
 import { artwork, sprite } from "../lib/sprites";
 import { DeckTile } from "../components/DeckTile";
 import { ErrorBox, Loading } from "../components/ui";
 import { NotFoundPage } from "./NotFoundPage";
+import { timeAgo } from "./PlayPage";
 
-type Profile = { trainer: Trainer; isMe: boolean; decks: (DeckSummary & { coverImage?: string | null })[] };
+type Profile = {
+  trainer: Trainer;
+  isMe: boolean;
+  decks: (DeckSummary & { coverImage?: string | null })[];
+  record: { played: number; wins: number; losses: number };
+  recentGames: RecentGame[];
+};
 
 export function TrainerPage() {
   const { name } = useParams();
@@ -16,7 +23,7 @@ export function TrainerPage() {
   if (error === "Trainer not found") return <NotFoundPage what="trainer" />;
   if (error || !data) return <ErrorBox message={error ?? "Unknown error"} />;
 
-  const { trainer, isMe, decks } = data;
+  const { trainer, isMe, decks, record, recentGames } = data;
   const favourite = pokemon.data?.find((p) => p.id === trainer.favouriteDex);
   const joined = new Date(trainer.createdAt.replace(" ", "T") + "Z").toLocaleDateString(undefined, { month: "long", year: "numeric" });
 
@@ -47,7 +54,13 @@ export function TrainerPage() {
             </div>
             <div>
               <dt>Games played</dt>
-              <dd>Coming soon</dd>
+              <dd>{record.played}</dd>
+            </div>
+            <div>
+              <dt>Wins / losses</dt>
+              <dd>
+                {record.wins} / {record.losses}
+              </dd>
             </div>
           </dl>
           {isMe && (
@@ -62,6 +75,26 @@ export function TrainerPage() {
           )}
         </div>
       </section>
+
+      {recentGames.length > 0 && (
+        <section className="related">
+          <h2>Recent games</h2>
+          <ul className="game-list wide">
+            {recentGames.map((g) => (
+              <li key={g.id}>
+                <span className={`legal ${g.won ? "yes" : "no"}`}>{g.won ? "Won" : "Lost"}</span>
+                <span>
+                  vs{" "}
+                  {g.opponentAvatar ? <Link to={`/trainer/${g.opponent}`}>{g.opponent}</Link> : g.opponent} with {g.deckName}
+                </span>
+                <span className="game-meta">
+                  {g.turns} turns · {g.endReason} · {timeAgo(g.finishedAt)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="related">
         <h2>{isMe ? "Your decks" : "Decks"}</h2>
