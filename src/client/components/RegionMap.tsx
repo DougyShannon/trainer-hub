@@ -1,5 +1,5 @@
 import type { KeyboardEvent } from "react";
-import { REGIONS, venueById, type Venue } from "../../shared/venues";
+import { REGIONS, venueById, type RegionId, type Venue } from "../../shared/venues";
 import type { MapPlace, Point, RegionMap as RegionMapData } from "../maps";
 
 const GRID = 50;
@@ -50,10 +50,39 @@ function PinShape({ venue }: { venue: Venue }) {
   return <rect className="pin-body" x={-10} y={-10} width={20} height={20} transform="rotate(45)" />;
 }
 
+/** A double chevron at the map's edge, pointing to the next region. */
+function Exit({ place, onRegion }: { place: MapPlace; onRegion: (region: RegionId) => void }) {
+  const exit = place.exit!;
+  const to = REGIONS.find((r) => r.id === exit.to)!;
+  const s = exit.facing === "east" ? 1 : -1;
+  const { x, y } = place;
+  const go = () => onRegion(exit.to);
+  return (
+    <g
+      className="map-exit"
+      role="link"
+      tabIndex={0}
+      aria-label={`Go to the ${to.name} map`}
+      onClick={go}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        go();
+      }}
+    >
+      <rect className="pin-hit" x={x - 44} y={y - 22} width={88} height={60} />
+      <path d={`M ${x - 12 * s} ${y - 9} L ${x - 3 * s} ${y} L ${x - 12 * s} ${y + 9} M ${x} ${y - 9} L ${x + 9 * s} ${y} L ${x} ${y + 9}`} />
+      <Label place={place} className="map-landmark-label map-exit-label" />
+    </g>
+  );
+}
+
 type Props = {
   map: RegionMapData;
   selected: string | null;
   onSelect: (venueId: string) => void;
+  /** Opens another region's map, from the arrows at the edges. */
+  onRegion: (region: RegionId) => void;
   /** Open tables waiting at each venue. */
   waitingAt: Record<string, number>;
   /** Venues whose practice badge the trainer has won. */
@@ -61,7 +90,7 @@ type Props = {
 };
 
 /** A region's tactical map. Gyms and stadiums are pins you can click or tab to. */
-export function RegionMap({ map, selected, onSelect, waitingAt, earned }: Props) {
+export function RegionMap({ map, selected, onSelect, onRegion, waitingAt, earned }: Props) {
   const region = REGIONS.find((r) => r.id === map.region)!;
   const pins = map.places.filter((p) => p.venue);
   const onKey = (e: KeyboardEvent, id: string) => {
@@ -116,7 +145,7 @@ export function RegionMap({ map, selected, onSelect, waitingAt, earned }: Props)
           ) : null,
         )}
         {map.places
-          .filter((p) => !p.venue)
+          .filter((p) => !p.venue && !p.exit)
           .map((p) =>
             p.kind === "landmark" ? (
               <g key={p.id}>
@@ -131,6 +160,12 @@ export function RegionMap({ map, selected, onSelect, waitingAt, earned }: Props)
             ),
           )}
       </g>
+
+      {map.places
+        .filter((p) => p.exit)
+        .map((p) => (
+          <Exit key={p.id} place={p} onRegion={onRegion} />
+        ))}
 
       {pins.map((p) => {
         const venue = venueById(p.venue);
