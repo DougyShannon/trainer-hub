@@ -1,6 +1,7 @@
 // The Trainer cards practice games play automatically. Each entry says when the card can be
 // played, what it does, and (for cards that need a choice) what happens once the choice is made.
-// Anything not listed here can still be played but does nothing, and the table says so.
+// More everyday cards live in trainers-more.ts. Anything in neither list is played "by hand"
+// with the table's manual tools (see manual.ts).
 
 import { otherSeat, type Seat } from "../game-types";
 import {
@@ -25,6 +26,7 @@ import {
   BENCH_SIZE,
 } from "./engine";
 import type { PCard, PPlayer, PSlot, PState, SlotKey } from "./types";
+import { moreTrainers } from "./trainers-more";
 
 type Data = Record<string, unknown>;
 export type TrainerEffect = {
@@ -36,13 +38,13 @@ export type TrainerEffect = {
 
 // ----- Helpers -----
 
-const me = (state: PState, seat: Seat) => state.players[seat];
-const them = (state: PState, seat: Seat) => state.players[otherSeat(seat)];
+export const me = (state: PState, seat: Seat) => state.players[seat];
+export const them = (state: PState, seat: Seat) => state.players[otherSeat(seat)];
 
-const benchSlots = (p: PPlayer) => p.bench.map((_, i) => `bench:${i}`);
+export const benchSlots = (p: PPlayer) => p.bench.map((_, i) => `bench:${i}`);
 
 /** Removes cards from a zone by uid, keeping their order. */
-function pull(zone: PCard[], uids: string[]) {
+export function pull(zone: PCard[], uids: string[]) {
   const taken: PCard[] = [];
   for (const uid of uids) {
     const i = zone.findIndex((c) => c.uid === uid);
@@ -51,13 +53,13 @@ function pull(zone: PCard[], uids: string[]) {
   return taken;
 }
 
-const names = (cards: PCard[]) => (cards.length ? cards.map((c) => c.name).join(", ") : "nothing");
+export const names = (cards: PCard[]) => (cards.length ? cards.map((c) => c.name).join(", ") : "nothing");
 
 /**
  * Lets the player search their deck for cards matching `match`. The whole deck is shown so a
  * human can see what's there. Searching can always come up empty (min 0), as in the real game.
  */
-function searchDeck(state: PState, seat: Seat, card: PCard, title: string, match: (c: PCard) => boolean, max: number, data: Data = {}) {
+export function searchDeck(state: PState, seat: Seat, card: PCard, title: string, match: (c: PCard) => boolean, max: number, data: Data = {}) {
   const p = me(state, seat);
   const options = p.deck.filter(match).map((c) => c.uid);
   if (!options.length) {
@@ -81,7 +83,7 @@ function lookAtTop(state: PState, seat: Seat, card: PCard, n: number, title: str
   ask(state, { seat, title, zone: "deck", options, shown: top.map((c) => c.uid), min: 0, max: 1, effect: card.name });
 }
 
-function toHand(state: PState, seat: Seat, card: PCard, picks: string[]) {
+export function toHand(state: PState, seat: Seat, card: PCard, picks: string[]) {
   const p = me(state, seat);
   const found = pull(p.deck, picks);
   p.hand.push(...found);
@@ -89,7 +91,7 @@ function toHand(state: PState, seat: Seat, card: PCard, picks: string[]) {
   log(state, seat, `${p.name} put ${names(found)} into their hand with ${card.name}.`);
 }
 
-function toBench(state: PState, seat: Seat, card: PCard, picks: string[]) {
+export function toBench(state: PState, seat: Seat, card: PCard, picks: string[]) {
   const p = me(state, seat);
   const found = pull(p.deck, picks).slice(0, BENCH_SIZE - p.bench.length);
   for (const c of found) p.bench.push(newSlot(c, state.turn));
@@ -97,10 +99,10 @@ function toBench(state: PState, seat: Seat, card: PCard, picks: string[]) {
   log(state, seat, `${p.name} put ${names(found)} onto their Bench with ${card.name}.`);
 }
 
-const benchFull = (state: PState, seat: Seat) => (me(state, seat).bench.length >= BENCH_SIZE ? "Your Bench is full." : null);
+export const benchFull = (state: PState, seat: Seat) => (me(state, seat).bench.length >= BENCH_SIZE ? "Your Bench is full." : null);
 
 /** "Discard N other cards from your hand" costs, asked before the effect. */
-function discardCost(state: PState, seat: Seat, card: PCard, n: number) {
+export function discardCost(state: PState, seat: Seat, card: PCard, n: number) {
   const p = me(state, seat);
   ask(state, {
     seat,
@@ -113,17 +115,17 @@ function discardCost(state: PState, seat: Seat, card: PCard, n: number) {
     data: { step: "cost" },
   });
 }
-function payDiscard(state: PState, seat: Seat, picks: string[]) {
+export function payDiscard(state: PState, seat: Seat, picks: string[]) {
   const p = me(state, seat);
   const gone = pull(p.hand, picks);
   p.discard.push(...gone);
   log(state, seat, `${p.name} discarded ${names(gone)}.`);
 }
-const needsOtherCards = (n: number) => (state: PState, seat: Seat) =>
+export const needsOtherCards = (n: number) => (state: PState, seat: Seat) =>
   me(state, seat).hand.length - 1 < n ? `You need ${plural(n, "other card")} in your hand to discard.` : null;
 
 /** Moves the chosen opponent's Benched Pokémon into their Active Spot. */
-function gust(state: PState, seat: Seat, card: PCard) {
+export function gust(state: PState, seat: Seat, card: PCard) {
   const opp = them(state, seat);
   ask(state, {
     seat,
@@ -135,14 +137,14 @@ function gust(state: PState, seat: Seat, card: PCard) {
     effect: card.name,
   });
 }
-function resumeGust(state: PState, seat: Seat, picks: string[]) {
+export function resumeGust(state: PState, seat: Seat, picks: string[]) {
   const opp = them(state, seat);
   const index = Number(picks[0].split(":")[1]);
   const name = topCard(opp.bench[index]).name;
   switchActive(opp, index);
   log(state, seat, `${name} was switched into ${opp.name}'s Active Spot.`);
 }
-const oppHasBench = (state: PState, seat: Seat) => (them(state, seat).bench.length ? null : "Your opponent has no Benched Pokémon.");
+export const oppHasBench = (state: PState, seat: Seat) => (them(state, seat).bench.length ? null : "Your opponent has no Benched Pokémon.");
 
 /** Cards and Pokémon that could still evolve from a Basic in play with Rare Candy. */
 function candyPairs(state: PState, seat: Seat) {
@@ -497,7 +499,10 @@ export const TRAINERS: Record<string, TrainerEffect> = {
 };
 
 /** The effect for a Trainer card. Reprints like "Boss's Orders (Ghetsis)" share one entry. */
-export const trainerFor = (name: string): TrainerEffect | undefined => TRAINERS[name.replace(/\s*\(.*\)$/, "")];
+export const trainerFor = (name: string): TrainerEffect | undefined => {
+  const base = name.replace(/\s*\(.*\)$/, "");
+  return TRAINERS[base] ?? moreTrainers()[base];
+};
 
 // ----- Pokémon Tools -----
 

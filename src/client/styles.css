@@ -501,8 +501,14 @@ textarea { resize: vertical; font: inherit; }
 .slot { position: relative; display: grid; justify-items: center; background: none; border: 0; padding: 0; cursor: pointer; color: inherit; font: inherit; }
 .slot:disabled { cursor: default; }
 .slot.target .gcard { outline: 3px dashed var(--accent); outline-offset: 2px; }
-.dmg { position: absolute; top: 18%; right: -6px; min-width: 30px; padding: 3px 6px; border-radius: 999px; background: var(--bad); color: #fff; font: 700 13px var(--mono); box-shadow: var(--shadow); }
-.dmg.ko { background: #000; }
+/* Damage: a red counter just under the HP printed at the card's top right. Sized from the card's width. */
+.gcard:has(.dmg-counter) { container-type: inline-size; }
+.dmg-counter {
+  position: absolute; z-index: 2; top: 11.5%; right: 4%; width: 27cqw; aspect-ratio: 1; display: grid; place-items: center;
+  border-radius: 50%; background: #d3202f; color: #fff; border: max(1.5px, 1.6cqw) solid #fff;
+  font: 800 max(10px, 11.5cqw)/1 var(--body); letter-spacing: -0.02em; box-shadow: 0 1px 4px rgb(0 0 0 / 45%);
+}
+.dmg-counter.ko { background: #111; }
 .stack-count { position: absolute; top: 4px; left: 4px; background: rgb(0 0 0 / 65%); color: #fff; border-radius: calc(6px * var(--round)); padding: 0 5px; font-size: 11px; }
 .conds { position: absolute; bottom: 30%; left: 0; right: 0; display: grid; justify-items: center; gap: 2px; }
 .cond { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px; color: #fff; background: #555; }
@@ -945,6 +951,17 @@ textarea { resize: vertical; font: inherit; }
 /* ----- Game tables: hover zoom, card details, turn guide ----- */
 .card-zoom { position: fixed; z-index: 70; pointer-events: none; border-radius: 14px; overflow: hidden; box-shadow: 0 12px 40px rgb(0 0 0 / 35%); background: var(--surface-2); }
 .card-zoom img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.zoom-dmg {
+  position: absolute; top: 10.5%; right: 4%; width: 84px; height: 84px; display: grid; place-content: center; justify-items: center;
+  border-radius: 50%; background: #d3202f; color: #fff; border: 4px solid #fff; box-shadow: 0 3px 12px rgb(0 0 0 / 45%);
+}
+.zoom-dmg.ko { background: #111; }
+.zoom-dmg-num { font: 800 34px/1 var(--body); }
+.zoom-dmg-label { font: 700 11px/1.1 var(--body); text-transform: uppercase; letter-spacing: 0.04em; }
+.zoom-hp-left {
+  position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); white-space: nowrap;
+  background: rgb(0 0 0 / 78%); color: #fff; font: 700 15px/1 var(--body); padding: 7px 12px; border-radius: 999px;
+}
 .card-summary { display: grid; gap: 3px; }
 .card-summary-hp { display: flex; align-items: center; gap: 6px; font-size: 15px; }
 .how-to { margin: 0; padding: 8px 10px; background: var(--accent-soft); border-radius: calc(8px * var(--round)); }
@@ -989,6 +1006,34 @@ textarea { resize: vertical; font: inherit; }
 .my-hand .hand-card:hover { transform: translateY(-4px); }
 .my-hand .hand-card.lifted { opacity: 0.35; }
 .my-hand .hand-role { bottom: auto; top: calc(var(--cw) * 0.42); }
+/* Tapping a turn guide option stands the cards that do it up out of the hand; the rest sink down. */
+.my-hand { transition: height 0.15s; }
+.my-hand.raising { height: calc(var(--cw) * 1.4 + 18px); }
+.my-hand.raising .hand-card.raised .gcard { outline: 3px solid var(--gold); outline-offset: 2px; box-shadow: 0 0 16px color-mix(in srgb, var(--gold) 70%, transparent); }
+.my-hand.raising .hand-card.sunk { transform: translateY(calc(var(--cw) * 0.72)); opacity: 0.5; }
+.my-hand.raising .hand-card.sunk:hover { transform: translateY(calc(var(--cw) * 0.72 - 4px)); }
+
+.guide-row.tappable { padding: 0; }
+.guide-btn {
+  display: grid; gap: 2px; width: 100%; padding: 7px 9px; background: none; border: 0; border-radius: inherit;
+  color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.guide-row.tappable:hover { background: var(--surface-2); }
+.guide-row.picked { border-color: var(--gold); border-left-color: var(--gold); background: color-mix(in srgb, var(--gold) 14%, var(--surface)); }
+.guide-tap { color: var(--accent); font-weight: 600; }
+.guide-row.picked .guide-tap { color: var(--ink); }
+
+/* By hand moves (practice games) */
+.practice-hand { background: var(--surface-2); border-left: 3px solid var(--accent); padding: 6px 9px; border-radius: 6px; }
+.modal.by-hand { max-width: 640px; }
+.by-hand-card { display: grid; grid-template-columns: 110px 1fr; gap: 12px; align-items: start; background: var(--surface-2); border-radius: calc(10px * var(--round)); padding: 10px; }
+.by-hand-card img { width: 100%; border-radius: 6px; }
+.by-hand-card p { margin: 4px 0 0; }
+.by-hand-group h3 { margin: 12px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.by-hand-ops { display: flex; flex-wrap: wrap; gap: 6px; }
+.by-hand-op { display: flex; gap: 4px; align-items: center; }
+.by-hand-op select { font: inherit; font-size: 13px; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+@media (max-width: 640px) { .by-hand-card { grid-template-columns: 80px 1fr; } }
 
 /* Energy cards tucked under a Pokémon, with their symbols showing below it. */
 .slot .gcard { position: relative; z-index: 2; }

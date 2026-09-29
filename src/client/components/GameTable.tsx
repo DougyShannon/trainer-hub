@@ -53,18 +53,31 @@ const CONDITION_LABEL: Record<Condition, string> = {
 
 // ----- Small pieces -----
 
+/** A red counter just under the card's HP (top right) with the total damage it has taken. */
+export function DamageCounter({ damage }: { damage: { taken: number; hp: number | null } }) {
+  const ko = damage.hp !== null && damage.taken >= damage.hp;
+  return (
+    <span className={`dmg-counter${ko ? " ko" : ""}`} title={`${damage.taken} damage`}>
+      {damage.taken}
+    </span>
+  );
+}
+
 export function GameCard({
   card,
   onClick,
   selected,
   size = "md",
   label,
+  damage,
 }: {
   card: CardRef | null;
   onClick?: () => void;
   selected?: boolean;
   size?: "sm" | "md" | "lg";
   label?: string;
+  /** Damage on a Pokémon in play, shown as a red counter under its HP. */
+  damage?: { taken: number; hp: number | null };
 }) {
   const [broken, setBroken] = useState(false);
   const cls = `gcard ${size}${selected ? " selected" : ""}${card ? "" : " back"}${onClick ? " clickable" : ""}`;
@@ -78,14 +91,18 @@ export function GameCard({
     <span className="gcard-back-mark" aria-hidden="true" />
   );
   const aria = label ?? (card ? card.name : "Face-down card");
-  const zoom = zoomHandlers(card);
+  const hurt = damage && damage.taken > 0 ? damage : undefined;
+  const zoom = zoomHandlers(card, hurt);
+  const counter = hurt && <DamageCounter damage={hurt} />;
   return onClick ? (
     <button type="button" className={cls} onClick={onClick} aria-label={aria} aria-pressed={selected} {...zoom}>
       {body}
+      {counter}
     </button>
   ) : (
     <span className={cls} role="img" aria-label={aria} {...zoom}>
       {body}
+      {counter}
     </span>
   );
 }
@@ -187,7 +204,6 @@ function FilledSlot({
   drop?: string;
 }) {
   const top = topOf(slot);
-  const remaining = top.hp ? top.hp - slot.damage : null;
   const ready = useReadyAttacks(slot);
   const energy = slot.attached.filter((c) => c.supertype === "Energy");
   const other = slot.attached.filter((c) => c.supertype !== "Energy");
@@ -199,10 +215,9 @@ function FilledSlot({
       data-drop={drop}
       aria-label={`${label}: ${top.name}${slot.damage ? `, ${slot.damage} damage` : ""}`}
     >
-      <GameCard card={top} />
+      <GameCard card={top} damage={{ taken: slot.damage, hp: top.hp }} />
       <EnergyTuck energy={energy} />
       <ReadyTag attacks={ready} />
-      {slot.damage > 0 && <span className={`dmg${remaining !== null && remaining <= 0 ? " ko" : ""}`}>{slot.damage}</span>}
       {slot.pokemon.length > 1 && <span className="stack-count">×{slot.pokemon.length}</span>}
       {slot.conditions.length > 0 && (
         <span className="conds">
@@ -256,6 +271,13 @@ export function GameTable({
   const [picking, setPicking] = useState<Picking | null>(null);
   const [pile, setPile] = useState<PileView | null>(null);
   const [confirmConcede, setConfirmConcede] = useState(false);
+  // The turn guide option whose cards are raised in your hand.
+  const [raise, setRaise] = useState<{ what: string; cards: string[] } | null>(null);
+  const handKey = mine.hand?.map((c) => c.uid).join() ?? "";
+  useEffect(() => setRaise(null), [handKey, myTurn]);
+  useEffect(() => {
+    if (raise) document.querySelector(".my-hand .hand-card.raised")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [raise]);
 
   // Drop a selection once the card it points at has moved (by either player).
   useEffect(() => {
@@ -465,11 +487,11 @@ export function GameTable({
           />
           </div>
 
-          <div className="my-hand" aria-label="Hand">
+          <div className={`my-hand${raise ? " raising" : ""}`} aria-label="Hand">
             {mine.hand ? (
               mine.hand.length ? (
                 mine.hand.map((c) => (
-                  <div key={c.uid} className={`hand-card${drag.dragging?.uid === c.uid ? " lifted" : ""}`} {...(canDrag ? drag.source(c, c) : {})}>
+                  <div key={c.uid} className={`hand-card${drag.dragging?.uid === c.uid ? " lifted" : ""}${raise ? (raise.cards.includes(c.uid) ? " raised" : " sunk") : ""}`} {...(canDrag ? drag.source(c, c) : {})}>
                     <GameCard card={c} selected={sel?.kind === "card" && sel.card.uid === c.uid} onClick={view.you ? () => selectCard(c, "hand", me) : undefined} />
                   </div>
                 ))
@@ -502,6 +524,8 @@ export function GameTable({
                 title="Your turn: what you can do"
                 intro="This table doesn't enforce the rules, so you move the cards. Here's how to do each thing."
                 rows={liveGuide(mine, view.turn, () => setSel({ kind: "slot", side: me, ref: { zone: "active" } }))}
+                picked={raise?.what}
+                onPick={(row) => setRaise(row ? { what: row.what, cards: row.cards ?? [] } : null)}
               />
             ) : (
               <p className="action-panel idle muted small">When it's your turn, everything you can do (and how) is listed here.</p>
@@ -670,6 +694,7 @@ function liveGuide(p: PlayerView, turn: number, openActive: () => void): GuideRo
   const benchFull = p.bench.length >= BENCH_SIZE;
   const firstTurns = turn <= 2;
   const trainer = (sub: string) => (c: CardRef) => c.supertype === "Trainer" && c.subtypes.includes(sub);
+  const uids = (test: (c: CardRef) => boolean) => hand.filter(test).map((c) => c.uid);
   return [
     { what: "Draw a card", how: "Done for you at the start of each turn.", state: "info" },
     {
@@ -677,36 +702,42 @@ function liveGuide(p: PlayerView, turn: number, openActive: () => void): GuideRo
       how: "Tap a Basic Pokémon in your hand, then press Put on your Bench.",
       state: has(isBasicPokemon) && !benchFull ? "ready" : "blocked",
       note: benchFull ? "Your Bench is full (5)." : !has(isBasicPokemon) ? "No Basic Pokémon in your hand." : "As many as you like.",
+      cards: benchFull ? [] : uids(isBasicPokemon),
     },
     {
       what: "Evolve a Pokémon",
       how: "Tap the Evolution card in your hand, press Evolve a Pokémon…, then tap the Pokémon it evolves from.",
       state: has((c) => isPokemon(c) && !isBasicPokemon(c)) && !firstTurns ? "ready" : "blocked",
       note: firstTurns ? "Nobody can evolve on their first turn." : !has((c) => isPokemon(c) && !isBasicPokemon(c)) ? "No Evolution cards in your hand." : "Not a Pokémon that came into play this turn.",
+      cards: uids((c) => isPokemon(c) && !isBasicPokemon(c)),
     },
     {
       what: "Attach 1 Energy",
       how: "Tap an Energy card in your hand, press Attach to a Pokémon…, then tap the Pokémon.",
       state: has((c) => c.supertype === "Energy") ? "ready" : "blocked",
       note: has((c) => c.supertype === "Energy") ? "Once per turn." : "No Energy in your hand.",
+      cards: uids((c) => c.supertype === "Energy"),
     },
     {
       what: "Play Items and Tools",
       how: "Tap the card, do what it says, then press Play / discard (Tools: Attach to a Pokémon…).",
       state: has(trainer("Item")) || has(trainer("Pokémon Tool")) ? "ready" : "blocked",
       note: has(trainer("Item")) || has(trainer("Pokémon Tool")) ? "As many as you like." : "None in your hand.",
+      cards: uids((c) => trainer("Item")(c) || trainer("Pokémon Tool")(c)),
     },
     {
       what: "Play 1 Supporter",
       how: "Tap the Supporter, do what it says, then press Play / discard.",
       state: has(trainer("Supporter")) && turn !== 1 ? "ready" : "blocked",
       note: turn === 1 ? "The player who goes first can't play one on turn 1." : has(trainer("Supporter")) ? "Once per turn." : "No Supporter in your hand.",
+      cards: uids(trainer("Supporter")),
     },
     {
       what: "Play a Stadium",
       how: "Tap the Stadium in your hand, then press Play Stadium.",
       state: has(trainer("Stadium")) ? "ready" : "blocked",
       note: has(trainer("Stadium")) ? "Once per turn." : "No Stadium in your hand.",
+      cards: uids(trainer("Stadium")),
     },
     {
       what: "Retreat",
