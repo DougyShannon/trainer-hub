@@ -1,12 +1,15 @@
 // Rules engine for practice games against the computer. It enforces the core rules of the
 // Pokémon TCG: setup and mulligans, one Energy and one Supporter per turn, evolving, retreating,
 // attack costs, damage with Weakness and Resistance, Special Conditions, Knock Outs, prizes and
-// the ways to win. Common Trainer cards are automated in trainers.ts; unusual card text is not.
+// the ways to win. Common Trainer cards are automated in trainers.ts and trainers-more.ts; anything else is
+// played "by hand" with the moves in manual.ts.
 
 import { otherSeat, type Condition, type Seat } from "../game-types";
 import type { PAction, PCard, PPlayer, PSlot, PState, Prompt, SlotKey } from "./types";
 import { ATTACK_RESUME, resolveAttack } from "./attacks";
 import { AUTOMATED_TOOLS, trainerFor, toolHpBonus } from "./trainers";
+import { FIRST_TURN_SUPPORTERS } from "./trainers-more";
+import { applyManual, MANUAL_RESUME } from "./manual";
 
 export class RuleError extends Error {}
 export const fail = (message: string): never => {
@@ -274,7 +277,7 @@ export function cantPlayTrainerReason(state: PState, seat: Seat, card: PCard): s
   if (isTool(card)) return slotKeys(p).some((k) => !slotAt(p, k)!.tool) ? null : "All your Pokémon already have a Tool.";
   if (isSupporter(card)) {
     if (p.supporterPlayed) return "You've already played a Supporter this turn.";
-    if (state.turn === 1) return "The player who goes first can't play a Supporter on their first turn.";
+    if (state.turn === 1 && !FIRST_TURN_SUPPORTERS.includes(card.name)) return "The player who goes first can't play a Supporter on their first turn.";
   }
   if (isStadium(card)) {
     if (p.stadiumPlayed) return "You've already played a Stadium this turn.";
@@ -385,7 +388,7 @@ export function applyPractice(state: PState, seat: Seat, action: PAction) {
         if (state.stadium) state.players[state.stadium.owner].discard.push(state.stadium.card);
         state.stadium = { card, owner: seat };
         p.stadiumPlayed = true;
-        log(state, seat, `${p.name} played the Stadium ${card.name}. (Stadium effects aren't automated in practice games.)`);
+        log(state, seat, `${p.name} played the Stadium ${card.name}.`);
         return;
       }
       if (isSupporter(card)) p.supporterPlayed = true;
@@ -393,11 +396,11 @@ export function applyPractice(state: PState, seat: Seat, action: PAction) {
       const effect = trainerFor(card.name);
       log(state, seat, `${p.name} played ${card.name}.`);
       if (!effect) {
-        log(state, seat, `${card.name}'s effect isn't automated in practice games yet, so it had no effect.`, "system");
+        log(state, seat, `Do what ${card.name} says with the "By hand" moves.`, "system");
         return;
       }
       effect.play(state, seat, card);
-      return;
+      return settle(state);
     }
 
     case "retreat": {
@@ -445,6 +448,12 @@ export function applyPractice(state: PState, seat: Seat, action: PAction) {
       }
       resolveAttack(state, seat, attack);
       state.pendingEnd = true;
+      return settle(state);
+    }
+
+    case "byHand": {
+      mustBeYourTurn(state, seat);
+      applyManual(state, seat, action.op, action.amount);
       return settle(state);
     }
 
@@ -516,7 +525,7 @@ export function resolvePrompt(state: PState, seat: Seat, picks: string[]) {
     fail(prompt.min === prompt.max ? `Choose ${prompt.min}.` : `Choose between ${prompt.min} and ${prompt.max}.`);
   }
   state.prompt = null;
-  const resume = RESUME[prompt.effect] ?? ATTACK_RESUME[prompt.effect] ?? trainerFor(prompt.effect)?.resume;
+  const resume = RESUME[prompt.effect] ?? ATTACK_RESUME[prompt.effect] ?? MANUAL_RESUME[prompt.effect] ?? trainerFor(prompt.effect)?.resume;
   if (!resume) fail("Unknown choice.");
   resume!(state, seat, unique, prompt.data ?? {});
   if (!state.prompt && state.queue.length) state.prompt = state.queue.shift()!;
