@@ -28,8 +28,9 @@ import {
 } from "./engine";
 import { countFor, finalDamage } from "./attacks";
 import { trainerFor } from "./trainers";
-import { baseName, isAutomatedTool } from "./effects";
+import { baseName, benchLimit, isAutomatedTool, toolRoom } from "./effects";
 import { cardActions } from "./actions";
+import { abilityWorth } from "./abilities";
 import type { Attack, PAction, PCard, PPlayer, PSlot, PState, SlotKey } from "./types";
 
 export type BotSkill = {
@@ -168,7 +169,7 @@ function mainPhase(state: PState, seat: Seat, skill: BotSkill): PAction {
   }
 
   // 2. Items.
-  const benchRoom = p.bench.length < Math.min(skill.benchMax, BENCH_SIZE);
+  const benchRoom = p.bench.length < Math.min(skill.benchMax, benchLimit(state, seat));
   const deckHasBasic = p.deck.some(isBasicPokemon);
   const items: [string, boolean][] = [
     ["Rare Candy", true],
@@ -207,7 +208,7 @@ function mainPhase(state: PState, seat: Seat, skill: BotSkill): PAction {
   }
 
   // 3. Basic Pokémon onto the Bench.
-  if (p.bench.length < Math.min(skill.benchMax, BENCH_SIZE)) {
+  if (p.bench.length < Math.min(skill.benchMax, benchLimit(state, seat))) {
     const basic = p.hand.find((c) => isBasicPokemon(c) && !skip(c.uid));
     if (basic) return { type: "playBasic", uid: basic.uid };
   }
@@ -224,7 +225,7 @@ function mainPhase(state: PState, seat: Seat, skill: BotSkill): PAction {
   // 5. Tools that do something (Technical Machines are left for people to use).
   const tool = p.hand.find((c) => isTool(c) && isAutomatedTool(baseName(c.name)) && !c.name.startsWith("Technical Machine") && playable(c));
   if (tool && !skip(tool.uid)) {
-    const target = toolTarget(p, tool);
+    const target = toolTarget(state, p, tool);
     if (target) return { type: "attachTool", uid: tool.uid, slot: target };
   }
 
@@ -280,6 +281,7 @@ function mainPhase(state: PState, seat: Seat, skill: BotSkill): PAction {
 /** Whether a card action (usually a Stadium's) helps the computer right now. */
 function actionWorthIt(state: PState, seat: Seat, id: string, card: PCard) {
   const p = state.players[seat];
+  if (id.startsWith("ab:")) return abilityWorth(state, seat, id);
   if (id.startsWith("fossil:") || id.startsWith("grant:")) return false;
   if (id.startsWith("seal:")) return baseName(card.name) === "Forest Seal Stone";
   const name = baseName(card.name);
@@ -319,8 +321,8 @@ function gustTarget(state: PState, seat: Seat): number | null {
   return best;
 }
 
-function toolTarget(p: PPlayer, tool: PCard): SlotKey | null {
-  const free = slotKeys(p).filter((k) => !slotAt(p, k)!.tool);
+function toolTarget(state: PState, p: PPlayer, tool: PCard): SlotKey | null {
+  const free = slotKeys(p).filter((k) => toolRoom(state, slotAt(p, k)!));
   if (!free.length) return null;
   if (tool.name === "Bravery Charm") return free.find((k) => isBasicPokemon(topCard(slotAt(p, k)!))) ?? null;
   return free.includes("active") ? "active" : free[0];
@@ -407,7 +409,7 @@ function answerPrompt(state: PState, seat: Seat, skill: BotSkill): string[] {
         return [...prompt.options].sort((a, b) => score(b) - score(a)).slice(0, pickCount);
       }
       const target = gustTarget(state, seat);
-      if (target !== null && prompt.options.includes(`bench:${target}`)) return [`bench:${target}`];
+      if (pickCount === 1 && target !== null && prompt.options.includes(`bench:${target}`)) return [`bench:${target}`];
       // Nothing to Knock Out: pull up something that's slow to retreat or has no Energy.
       const stuck = (key: string) => {
         const s = opp.bench[benchIndexOf(key)];
@@ -419,13 +421,13 @@ function answerPrompt(state: PState, seat: Seat, skill: BotSkill): string[] {
       const amount = Number(prompt.data?.amount ?? 0);
       const slotOf = (key: string) => (key === "active" ? opp.active! : opp.bench[benchIndexOf(key)]);
       const score = (key: string) => (hpLeft(state, slotOf(key)) <= amount ? 1000 + prizeValue(topCard(slotOf(key))) * 100 : 0) - hpLeft(state, slotOf(key));
-      return skill.smart ? [[...prompt.options].sort((a, b) => score(b) - score(a))[0]] : [shuffled[0]];
+      return skill.smart ? [...prompt.options].sort((a, b) => score(b) - score(a)).slice(0, pickCount) : shuffled.slice(0, pickCount);
     }
     case "myPokemon": {
       if (prompt.effect === "Rare Candy") return [prompt.options.includes("active") ? "active" : prompt.options[0]];
       if (["attach", "target"].includes(String(prompt.data?.step))) return [prompt.options.includes("active") ? "active" : prompt.options[0]];
       const hurt = (key: string) => slotAt(p, key as SlotKey)!.damage;
-      return [[...prompt.options].sort((a, b) => hurt(b) - hurt(a))[0]];
+      return [...prompt.options].sort((a, b) => hurt(b) - hurt(a)).slice(0, pickCount);
     }
     case "hand": {
       const cards = byUid(p.hand);
@@ -452,7 +454,7 @@ function want(state: PState, seat: Seat, c: PCard) {
     if (c.evolvesFrom && inPlay.some((x) => x.name === c.evolvesFrom)) return 100;
     if (c.candyFrom && inPlay.some((x) => x.name === c.candyFrom) && p.hand.some((x) => x.name === "Rare Candy")) return 95;
     if (isBasicPokemon(c)) {
-      if (p.bench.length >= BENCH_SIZE) return 5;
+      if (p.bench.length >= benchLimit(state, seat)) return 5;
       const line = [...p.deck, ...p.hand].some((x) => x.evolvesFrom === c.name);
       const already = inPlay.filter((x) => x.name === c.name).length + p.hand.filter((x) => x.name === c.name).length;
       return 60 + (line ? 15 : 0) + (c.hp ?? 0) / 20 - already * 10;

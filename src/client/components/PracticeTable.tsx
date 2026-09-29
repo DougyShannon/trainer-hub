@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { otherSeat, type CardRef, type Condition, type Seat } from "../../shared/game-types";
 import {
   BENCH_SIZE,
@@ -12,6 +12,7 @@ import {
   isAutomated,
   isBasicPokemon,
   isSetupBasic,
+  isSetupActive,
   isEnergy,
   isItem,
   isPokemon,
@@ -41,6 +42,8 @@ import { MATS, matById, matFor, type Mat } from "../boards/library";
 import { useBoardPrefs } from "../boards/prefs";
 import { newestTurnFirst } from "../lib/log";
 import { cardActions } from "../../shared/practice/actions";
+import { isAutomatedAbility } from "../../shared/practice/abilities";
+import { attachedTo, benchLimit, toolRoom, toolsOn } from "../../shared/practice/effects";
 import { venueById } from "../../shared/venues";
 
 type Sel = { kind: "hand"; uid: string } | { kind: "slot"; side: Seat; key: SlotKey } | null;
@@ -130,9 +133,11 @@ function PracticeSlot({
       )}
       {slot.tool && (
         <span className="attached">
-          <span className="att tool" title={slot.tool.name}>
-            {slot.tool.name}
-          </span>
+          {toolsOn(slot).map((t) => (
+            <span key={t.uid} className="att tool" title={t.name}>
+              {t.name}
+            </span>
+          ))}
         </span>
       )}
     </button>
@@ -208,7 +213,7 @@ function Side({
       dropState={dropState?.("active")}
     />
   );
-  const benchSlots = Array.from({ length: BENCH_SIZE }, (_, i) => {
+  const benchSlots = Array.from({ length: Math.max(BENCH_SIZE, Math.min(benchLimit(state, seat), p.bench.length + 1)) }, (_, i) => {
     const key = `bench:${i}` as SlotKey;
     const slot = p.bench[i] ?? null;
     const drop = !dropState ? undefined : slot ? key : "bench-empty";
@@ -264,7 +269,11 @@ function Side({
     </div>
   );
   const bench = (
-    <div className="bench" aria-label={`${p.name}'s Bench`}>
+    <div
+      className={`bench${benchSlots.length > BENCH_SIZE ? " big" : ""}`}
+      style={benchSlots.length > BENCH_SIZE ? ({ "--n": benchSlots.length } as CSSProperties) : undefined}
+      aria-label={`${p.name}'s Bench`}
+    >
       {benchSlots}
     </div>
   );
@@ -287,6 +296,63 @@ function Side({
 
 function Cost({ cost }: { cost: string[] }) {
   return <span className="type-row">{cost.length ? cost.map((c, i) => <Energy key={i} type={c} />) : <Energy type="Free" />}</span>;
+}
+
+/**
+ * What a player can do with an Ability: a Use button for ones you choose to use, a note for ones
+ * the game applies by itself, and the By hand moves for the few it can't do yet.
+ */
+function AbilityControl({
+  state,
+  seat,
+  card,
+  ability,
+  mine,
+  myTurn,
+  act,
+  byHand,
+}: {
+  state: PState;
+  seat: Seat;
+  card: PCard;
+  ability: { name: string; text: string };
+  mine: boolean;
+  myTurn: boolean;
+  act: (a: PAction) => void;
+  byHand: (about: ByHandFor) => void;
+}) {
+  const action = mine ? cardActions(state, seat).find((x) => x.id === `ab:${card.uid}:${ability.name}`) : undefined;
+  if (action) {
+    return (
+      <>
+        <button type="button" className="primary-btn small" disabled={!myTurn || !!action.blocked} onClick={() => act({ type: "special", id: action.id })}>
+          Use {ability.name}
+        </button>
+        {action.blocked && myTurn && <span className="small muted">{action.blocked}</span>}
+      </>
+    );
+  }
+  if (isAutomatedAbility(ability.name, ability.text)) {
+    const choice = /^(Once during your turn, when|When you play|you may)/i.test(ability.text) || /\byou may\b/.test(ability.text);
+    return <span className="small muted">{choice ? "The game asks if you want to use it when it happens." : "The game does this for you."}</span>;
+  }
+  return mine && myTurn ? (
+    <button
+      type="button"
+      className="secondary-btn small"
+      onClick={() =>
+        byHand({
+          card,
+          text: [`${ability.name}: ${ability.text}`],
+          why: "The game can't do this Ability for you yet. Do what it says with these moves.",
+        })
+      }
+    >
+      Use {ability.name} by hand
+    </button>
+  ) : (
+    <span className="small muted">The game can't do this Ability yet: its owner does what it says with the By hand moves.</span>
+  );
 }
 
 /** Everything about a Pokémon in play, with its attacks (as buttons when it's yours and Active). */
@@ -327,7 +393,12 @@ function PokemonInfo({
         {prizeValue(top) > 1 && <> · Worth {prizeValue(top)} Prize cards</>}
       </p>
       {(slot.energy.length > 0 || slot.tool) && (
-        <p className="small muted">Attached: {[...slot.energy.map((e) => e.name), ...(slot.tool ? [slot.tool.name] : [])].join(", ")}</p>
+        <p className="small muted">
+          Attached:{" "}
+          {attachedTo(slot)
+            .map((c) => c.name)
+            .join(", ")}
+        </p>
       )}
       {top.abilities.map((a) => (
         <div key={a.name} className="practice-attack ability">
@@ -335,23 +406,7 @@ function PokemonInfo({
             {a.type}: {a.name}
           </strong>
           <span className="small">{a.text}</span>
-          {mine && myTurn ? (
-            <button
-              type="button"
-              className="secondary-btn small"
-              onClick={() =>
-                byHand({
-                  card: top,
-                  text: [`${a.name}: ${a.text}`],
-                  why: "The game doesn't use Abilities for you. Do what it says with these moves.",
-                })
-              }
-            >
-              Use {a.name} by hand
-            </button>
-          ) : (
-            <span className="small muted">The game doesn't use Abilities for you: its owner does what it says with the By hand moves.</span>
-          )}
+          <AbilityControl state={state} seat={seat} card={top} ability={a} mine={mine} myTurn={myTurn} act={act} byHand={byHand} />
         </div>
       ))}
       {attacksOf(state, slot).map((a, i) => {
@@ -364,7 +419,7 @@ function PokemonInfo({
             <div className="practice-attack-head">
               <Cost cost={cost} />
               <strong>{a.name}</strong>
-              {fromTool && <span className="small muted">from {slot.tool?.name}</span>}
+              {fromTool && <span className="small muted">from {toolsOn(slot).find((t) => t.attacks.includes(a))?.name}</span>}
               <span className="practice-dmg">{a.damage}</span>
             </div>
             {a.text && <span className="small">{a.text}</span>}
@@ -427,7 +482,7 @@ function HandCardActions({ state, me, card, act }: { state: PState; me: Seat; ca
   } else if (isPokemon(card)) {
     if (isBasicPokemon(card)) {
       controls =
-        p.bench.length >= BENCH_SIZE ? (
+        p.bench.length >= benchLimit(state, me) ? (
           <p className="small muted">Your Bench is full.</p>
         ) : (
           <button type="button" className="primary-btn small" onClick={() => act({ type: "playBasic", uid: card.uid })}>
@@ -463,7 +518,7 @@ function HandCardActions({ state, me, card, act }: { state: PState; me: Seat; ca
       ))
     );
   } else if (isTool(card)) {
-    const free = slotKeys(p).filter((k) => !slotAt(p, k)!.tool);
+    const free = slotKeys(p).filter((k) => toolRoom(state, slotAt(p, k)!));
     controls = free.length ? (
       free.map((key) => (
         <button key={key} type="button" className="primary-btn small" onClick={() => act({ type: "attachTool", uid: card.uid, slot: key })}>
@@ -584,14 +639,14 @@ function practiceGuide(state: PState, me: Seat, open: (key: SlotKey) => void, by
     {
       what: "Put Basic Pokémon on your Bench",
       how: "Tap a Basic Pokémon in your hand, then press Put on your Bench.",
-      state: p.bench.length >= BENCH_SIZE ? "blocked" : basics.length ? "ready" : "blocked",
+      state: p.bench.length >= benchLimit(state, me) ? "blocked" : basics.length ? "ready" : "blocked",
       note:
-        p.bench.length >= BENCH_SIZE
+        p.bench.length >= benchLimit(state, me)
           ? "Your Bench is full."
           : basics.length
             ? `You have ${basics.map((c) => c.name).join(", ")}.`
             : "No Basic Pokémon in your hand.",
-      cards: p.bench.length >= BENCH_SIZE ? [] : uids(basics),
+      cards: p.bench.length >= benchLimit(state, me) ? [] : uids(basics),
     },
     {
       what: "Evolve a Pokémon",
@@ -653,10 +708,9 @@ function practiceGuide(state: PState, me: Seat, open: (key: SlotKey) => void, by
       note: actions.length ? actions.map((a) => (a.blocked ? `${a.label}: ${a.blocked}` : `${a.label}.`)).join(" ") : "Nothing in play has one right now.",
     },
     {
-      what: "Use an Ability, by hand",
-      how: "Abilities aren't automatic yet: tap the Pokémon, press Use by hand, then do what it says with those moves.",
-      state: "ready",
-      show: { label: "Open the By hand moves", run: byHand },
+      what: "Use an Ability",
+      how: "Tap the Pokémon and press Use under its Ability (the button also shows at the top of the table). Abilities that are always on, or that happen when something happens, are done for you, and the game asks when you have a choice.",
+      state: actions.some((a) => a.id.startsWith("ab:") && !a.blocked) ? "ready" : "info",
     },
     {
       what: "End your turn",
@@ -866,12 +920,12 @@ export function PracticeTable({
   const canDrop = (card: PCard, dropped: string) => {
     if (!canAct) return false;
     const target = playsAnywhere(card) ? "board" : dropped;
-    if (target === "bench-empty") return isBasicPokemon(card) && mine.bench.length < BENCH_SIZE;
+    if (target === "bench-empty") return isBasicPokemon(card) && mine.bench.length < benchLimit(state, me);
     if (target === "board") return card.supertype === "Trainer" && !isTool(card) && !cantPlayTrainerReason(state, me, card);
     const slot = slotAt(mine, target as SlotKey);
     if (!slot) return false;
     if (isEnergy(card)) return !mine.energyAttached;
-    if (isTool(card)) return !slot.tool;
+    if (isTool(card)) return toolRoom(state, slot);
     if (isPokemon(card) && !isBasicPokemon(card)) return evolveTargets(state, me, card).includes(target as SlotKey);
     return false;
   };
@@ -922,10 +976,12 @@ export function PracticeTable({
 
   const settingUp = state.status === "setup" && !state.setupDone[me];
   const toggleSetup = (c: PCard) => {
-    if (!isSetupBasic(c)) return;
+    if (!isSetupActive(c)) return;
     setSetupPick((s) => {
       if (s.active === c.uid) return { active: s.bench[0] ?? null, bench: s.bench.slice(1) };
       if (s.bench.includes(c.uid)) return { ...s, bench: s.bench.filter((u) => u !== c.uid) };
+      // Cinderace's Explosiveness lets it start in the Active Spot, but not on the Bench.
+      if (!isSetupBasic(c)) return { active: c.uid, bench: s.active ? [s.active, ...s.bench].slice(0, BENCH_SIZE) : s.bench };
       if (!s.active) return { ...s, active: c.uid };
       if (s.bench.length >= BENCH_SIZE) return s;
       return { ...s, bench: [...s.bench, c.uid] };
@@ -969,18 +1025,20 @@ export function PracticeTable({
         <span className={`turn-pill${myTurn ? " mine" : ""}`}>{turnLabel}</span>
         {thinking && <span className="turn-pill thinking">{theirs.name} is thinking…</span>}
         <span className="bar-spacer" />
-        {actions.map((a) => (
-          <button
-            key={a.id}
-            type="button"
-            className="secondary-btn small card-action"
-            disabled={!canAct || !!a.blocked}
-            title={a.blocked ?? a.card.rules.join(" ")}
-            onClick={() => play({ type: "special", id: a.id })}
-          >
-            {a.label}
-          </button>
-        ))}
+        {actions
+          .filter((a) => !a.id.startsWith("ab:") || !a.blocked)
+          .map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              className="secondary-btn small card-action"
+              disabled={!canAct || !!a.blocked}
+              title={a.blocked ?? (a.id.startsWith("ab:") ? a.card.abilities.map((x) => x.text).join(" ") : a.card.rules.join(" "))}
+              onClick={() => play({ type: "special", id: a.id })}
+            >
+              {a.label}
+            </button>
+          ))}
         {state.status === "playing" && (
           <button
             type="button"
@@ -1132,7 +1190,7 @@ export function PracticeTable({
                 return (
                   <div
                     key={c.uid}
-                    className={`hand-card${settingUp && !isSetupBasic(c) ? " dim" : ""}${drag.dragging?.uid === c.uid ? " lifted" : ""}${raise ? (raise.cards.includes(c.uid) ? " raised" : " sunk") : ""}`}
+                    className={`hand-card${settingUp && !isSetupActive(c) ? " dim" : ""}${drag.dragging?.uid === c.uid ? " lifted" : ""}${raise ? (raise.cards.includes(c.uid) ? " raised" : " sunk") : ""}`}
                     {...(canAct ? drag.source(c, { name: c.name, image: c.image }) : {})}
                   >
                     <GameCard

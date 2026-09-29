@@ -29,16 +29,18 @@ import {
   damageBonus,
   damageTaken,
   deckGuarded,
+  hasTool,
   hitWithAttack,
   hpLeft,
   isTera,
+  isV,
   putCounters,
   setCondition,
   specialEnergyOff,
   toolOf,
   weaknessFactor,
-  isV,
 } from "./effects";
+import { discardedByOpponent, effectsProof, typesOf, weaknessesOf } from "./abilities";
 import type { Attack, PCard, PSlot, PState } from "./types";
 
 const COUNT_WORDS: Record<string, number> = {
@@ -133,9 +135,9 @@ export function finalDamage(state: PState, seat: Seat, attacker: PSlot, defender
   let damage = base;
   if (!specialEnergyOff(state) && attacker.energy.some((e) => e.name === "Double Turbo Energy")) damage = Math.max(0, damage - 20);
   damage += damageBonus(state, seat, attacker, defender);
-  const types = topCard(attacker).types;
+  const types = typesOf(state, attacker);
   if (!/isn't affected by Weakness/i.test(text)) {
-    const weak = topCard(defender).weaknesses.find((w) => types.includes(w.type));
+    const weak = weaknessesOf(state, defender).find((w) => types.includes(w.type));
     const factor = weaknessFactor(state, attacker, defender);
     if (weak && factor) damage = weak.value.includes("+") ? damage + (parseInt(weak.value.replace(/\D/g, ""), 10) || 0) : damage * factor;
   }
@@ -185,7 +187,7 @@ export function resolveAttack(state: PState, seat: Seat, attack: Attack) {
   };
   let lastFlip: boolean | null = null;
   // Backtrack Badge lets a Colorless Pokémon flip its coins again once a turn (the game does it for a bad result).
-  const badge = toolOf(state, attacker) === "Backtrack Badge" && topCard(attacker).types.includes("Colorless") && !p.used.includes("backtrack");
+  const badge = hasTool(state, attacker, "Backtrack Badge") && topCard(attacker).types.includes("Colorless") && !p.used.includes("backtrack");
   const reflip = () => {
     if (!badge || p.used.includes("backtrack")) return false;
     p.used.push("backtrack");
@@ -293,7 +295,7 @@ export function resolveAttack(state: PState, seat: Seat, attack: Attack) {
     log(state, seat, `${attack.name} did no damage.`, "attack");
     if (base > 0) hitWithAttack(state, seat, attacker, defender, 0);
   }
-  const shielded = !!protect?.effects;
+  const shielded = !!protect?.effects || effectsProof(state, seat, attacker, defender);
 
   // ----- Effects -----
   if (
@@ -486,6 +488,7 @@ export function resolveAttack(state: PState, seat: Seat, attack: Attack) {
       const gone = who.deck.splice(0, toCount(m[1]));
       who.discard.push(...gone);
       log(state, seat, `${who.name} discarded the top ${plural(gone.length, "card")} of their deck.`);
+      if (who === opp) discardedByOpponent(state, oppSeat, gone, "deck");
     }
   }
   if ((m = find(/Your opponent discards (\w+) cards? from their hand\./i))) {
@@ -731,6 +734,7 @@ export const ATTACK_RESUME: Record<string, Resume> = {
     p.hand = p.hand.filter((c) => !picks.includes(c.uid));
     p.discard.push(...gone);
     log(state, seat, `${p.name} discarded ${gone.map((c) => c.name).join(", ")}.`);
+    discardedByOpponent(state, seat, gone, "hand");
   },
   energyToBench(state, seat, picks, data) {
     const p = state.players[seat];

@@ -57,23 +57,34 @@ export function HalfMat({ mat, flipped, parts, label, cover }: { mat: Mat; flipp
     ) : null;
 
   const style = { aspectRatio: String(mat.aspect), "--aspect": mat.aspect, "--cw": `${cw.toFixed(1)}px` } as CSSProperties;
+  // A bigger Bench (Area Zero Underdepths) has more Pokémon than the mat has spots: they sit in a row beside it.
+  const extra = parts.bench.slice(layout.bench.length).filter(Boolean);
+  const extraRow = extra.length > 0 && (
+    <div className="bench mat-extra-bench" style={{ "--cw": `${cw.toFixed(1)}px` } as CSSProperties}>
+      {extra}
+    </div>
+  );
   return (
-    <section ref={box} className={`mat${flipped ? " flipped" : ""}`} style={style} aria-label={label}>
-      <div className="mat-art" style={{ backgroundImage: `url("${mat.image}")` }} aria-hidden="true" />
-      {width > 0 && (
-        <>
-          {parts.prizes.slice(0, 6).map((p, i) => at(layout.prizes[i], p, `prize${i}`, i % 2 ? "under" : ""))}
-          {at(layout.stadium, parts.stadium, "stadium")}
-          {at(layout.deck, parts.deck, "deck")}
-          {at(layout.discard, parts.discard, "discard")}
-          {at(layout.lostZone, parts.lostZone, "lost", "small")}
-          {parts.bench.map((b, i) => at(layout.bench[i], b, `bench${i}`))}
-          {at(layout.active, parts.active, "active", "active")}
-          {at(layout.tag, parts.tag, "tag", "tag")}
-        </>
-      )}
-      {cover && <div className="mat-cover">{cover}</div>}
-    </section>
+    <>
+      {flipped && extraRow}
+      <section ref={box} className={`mat${flipped ? " flipped" : ""}`} style={style} aria-label={label}>
+        <div className="mat-art" style={{ backgroundImage: `url("${mat.image}")` }} aria-hidden="true" />
+        {width > 0 && (
+          <>
+            {parts.prizes.slice(0, 6).map((p, i) => at(layout.prizes[i], p, `prize${i}`, i % 2 ? "under" : ""))}
+            {at(layout.stadium, parts.stadium, "stadium")}
+            {at(layout.deck, parts.deck, "deck")}
+            {at(layout.discard, parts.discard, "discard")}
+            {at(layout.lostZone, parts.lostZone, "lost", "small")}
+            {parts.bench.slice(0, layout.bench.length).map((b, i) => at(layout.bench[i], b, `bench${i}`))}
+            {at(layout.active, parts.active, "active", "active")}
+            {at(layout.tag, parts.tag, "tag", "tag")}
+          </>
+        )}
+        {cover && <div className="mat-cover">{cover}</div>}
+      </section>
+      {!flipped && extraRow}
+    </>
   );
 }
 

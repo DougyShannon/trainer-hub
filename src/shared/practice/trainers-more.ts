@@ -25,7 +25,8 @@ import {
   switchActive,
   topCard,
 } from "./engine";
-import { benchLimit, setCondition } from "./effects";
+import { attachedTo, benchLimit, canHeal, setCondition } from "./effects";
+import { discardLocked, pickUpLocked, trainersStayDiscarded } from "./abilities";
 import {
   benchSlots,
   discardCost,
@@ -65,6 +66,7 @@ export const either =
 export const slots = (p: PPlayer) => slotKeys(p).map((k) => slotAt(p, k)!);
 
 export function heal(slot: PSlot, amount: number) {
+  if (!canHeal()) return 0;
   const before = slot.damage;
   slot.damage = Math.max(0, slot.damage - amount);
   return before - slot.damage;
@@ -136,7 +138,11 @@ export const recover = (
   to: "hand" | "deck",
   after?: (state: PState, seat: Seat, count: number) => void,
 ): TrainerEffect => ({
-  canPlay: (state, seat) => (me(state, seat).discard.some(match) ? null : "There's nothing in your discard pile for this card."),
+  canPlay: (state, seat) => {
+    if (to === "hand" && discardLocked(state, seat)) return "Slime Mold Colony stops cards leaving your discard pile for your hand.";
+    const ok = (c: PCard) => match(c) && !(to === "deck" && c.supertype === "Trainer" && trainersStayDiscarded(state, seat));
+    return me(state, seat).discard.some(ok) ? null : "There's nothing in your discard pile for this card.";
+  },
   play(state, seat, card) {
     const p = me(state, seat);
     ask(state, {
@@ -288,7 +294,7 @@ function pickUp(state: PState, seat: Seat, key: SlotKey, attached: "hand" | "dis
   const p = me(state, seat);
   const slot = slotAt(p, key)!;
   p.hand.push(...slot.pokemon);
-  const rest = [...slot.energy, ...(slot.tool ? [slot.tool] : [])];
+  const rest = attachedTo(slot);
   if (attached === "hand") p.hand.push(...rest);
   else p.discard.push(...rest);
   if (key === "active") p.active = null;
@@ -299,6 +305,7 @@ function pickUp(state: PState, seat: Seat, key: SlotKey, attached: "hand" | "dis
 export const pickUpCard = (which: Match, attached: "hand" | "discard"): TrainerEffect => ({
   canPlay: (state, seat) => {
     const p = me(state, seat);
+    if (pickUpLocked(state, seat)) return "Mentally Calm stops your Pokémon going back into your hand.";
     const ok = slotKeys(p).filter((k) => which(topCard(slotAt(p, k)!)));
     if (!ok.length) return "You have no Pokémon this card can pick up.";
     return ok.length === 1 && ok[0] === "active" && !p.bench.length ? "You'd have no Pokémon left in play." : null;

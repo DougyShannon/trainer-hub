@@ -54,7 +54,16 @@ export const MANUAL_OPS: { op: ManualOp; label: string; amount?: "count" | "dama
 const CONDITIONS: Condition[] = ["asleep", "burned", "confused", "paralyzed", "poisoned"];
 
 const all = (cards: PCard[]) => cards.map((c) => c.uid);
-const pull = (from: PCard[], uids: string[]) => uids.map((u) => from.splice(from.findIndex((c) => c.uid === u), 1)[0]).filter(Boolean);
+const pull = (from: PCard[], uids: string[]) =>
+  uids
+    .map(
+      (u) =>
+        from.splice(
+          from.findIndex((c) => c.uid === u),
+          1,
+        )[0],
+    )
+    .filter(Boolean);
 const names = (cards: PCard[]) => (cards.length ? cards.map((c) => c.name).join(", ") : "nothing");
 const say = (state: PState, seat: Seat, text: string) => log(state, seat, `By hand: ${text}`);
 
@@ -91,7 +100,9 @@ export function manualBlocked(state: PState, seat: Seat, op: ManualOp): string |
     case "energyFromDeck":
       return p.deck.some(isEnergy) ? null : "There's no Energy left in your deck.";
     case "moveEnergy":
-      return slotKeys(p).length > 1 && any(slotKeys(p), (k) => slotAt(p, k)!.energy.length > 0) ? null : "You need a Pokémon with Energy and another Pokémon to move it to.";
+      return slotKeys(p).length > 1 && any(slotKeys(p), (k) => slotAt(p, k)!.energy.length > 0)
+        ? null
+        : "You need a Pokémon with Energy and another Pokémon to move it to.";
     case "discardEnergy":
       return any(slotKeys(opp), (k) => slotAt(opp, k)!.energy.length > 0) ? null : "Your opponent's Pokémon have no Energy attached.";
     case "discardStadium":
@@ -106,8 +117,14 @@ export function applyManual(state: PState, seat: Seat, op: ManualOp, amount = 0)
   if (reason) fail(reason);
   const p = state.players[seat];
   const opp = state.players[otherSeat(seat)];
-  const choose = (title: string, zone: Parameters<typeof ask>[1]["zone"], options: string[], max: number, data: Data = {}, extra: { min?: number; shown?: string[] } = {}) =>
-    ask(state, { seat, title, zone, options, shown: extra.shown, min: extra.min ?? 1, max, effect: `manual:${op}`, data: { amount, ...data } });
+  const choose = (
+    title: string,
+    zone: Parameters<typeof ask>[1]["zone"],
+    options: string[],
+    max: number,
+    data: Data = {},
+    extra: { min?: number; shown?: string[] } = {},
+  ) => ask(state, { seat, title, zone, options, shown: extra.shown, min: extra.min ?? 1, max, effect: `manual:${op}`, data: { amount, ...data } });
 
   switch (op) {
     case "draw": {
@@ -119,7 +136,14 @@ export function applyManual(state: PState, seat: Seat, op: ManualOp, amount = 0)
     case "search":
       return choose("Search your deck: choose the cards the card lets you take", "deck", all(p.deck), p.deck.length, {}, { min: 0, shown: all(p.deck) });
     case "searchBench":
-      return choose("Choose Basic Pokémon to put onto your Bench", "deck", all(p.deck.filter(isBasicPokemon)), BENCH_SIZE - p.bench.length, {}, { min: 0, shown: all(p.deck) });
+      return choose(
+        "Choose Basic Pokémon to put onto your Bench",
+        "deck",
+        all(p.deck.filter(isBasicPokemon)),
+        BENCH_SIZE - p.bench.length,
+        {},
+        { min: 0, shown: all(p.deck) },
+      );
     case "fromDiscard":
       return choose("Choose cards to put from your discard pile into your hand", "discard", all(p.discard), p.discard.length);
     case "discardHand":
@@ -134,11 +158,26 @@ export function applyManual(state: PState, seat: Seat, op: ManualOp, amount = 0)
       shuffle(p.deck);
       return say(state, seat, `${p.name} shuffled their deck.`);
     case "switchMine":
-      return choose("Choose a Benched Pokémon to switch into your Active Spot", "myBench", p.bench.map((_, i) => `bench:${i}`), 1);
+      return choose(
+        "Choose a Benched Pokémon to switch into your Active Spot",
+        "myBench",
+        p.bench.map((_, i) => `bench:${i}`),
+        1,
+      );
     case "switchTheirs":
-      return choose(`Choose 1 of ${opp.name}'s Benched Pokémon to switch into the Active Spot`, "oppBench", opp.bench.map((_, i) => `bench:${i}`), 1);
+      return choose(
+        `Choose 1 of ${opp.name}'s Benched Pokémon to switch into the Active Spot`,
+        "oppBench",
+        opp.bench.map((_, i) => `bench:${i}`),
+        1,
+      );
     case "heal":
-      return choose(`Choose a Pokémon to heal ${amount || 10} damage from`, "myPokemon", slotKeys(p).filter((k) => slotAt(p, k)!.damage > 0), 1);
+      return choose(
+        `Choose a Pokémon to heal ${amount || 10} damage from`,
+        "myPokemon",
+        slotKeys(p).filter((k) => slotAt(p, k)!.damage > 0),
+        1,
+      );
     case "damage":
       return choose(`Choose 1 of ${opp.name}'s Pokémon to put ${amount || 10} damage on`, "oppPokemon", slotKeys(opp), 1);
     case "condition":
@@ -149,9 +188,20 @@ export function applyManual(state: PState, seat: Seat, op: ManualOp, amount = 0)
     case "energyFromDeck":
       return choose("Choose an Energy card from your deck", "deck", all(p.deck.filter(isEnergy)), 1, { step: "energy" }, { shown: all(p.deck) });
     case "moveEnergy":
-      return choose("Choose the Pokémon to move an Energy from", "myPokemon", slotKeys(p).filter((k) => slotAt(p, k)!.energy.length), 1, { step: "from" });
+      return choose(
+        "Choose the Pokémon to move an Energy from",
+        "myPokemon",
+        slotKeys(p).filter((k) => slotAt(p, k)!.energy.length),
+        1,
+        { step: "from" },
+      );
     case "discardEnergy":
-      return choose(`Choose 1 of ${opp.name}'s Pokémon to discard an Energy from`, "oppPokemon", slotKeys(opp).filter((k) => slotAt(opp, k)!.energy.length), 1);
+      return choose(
+        `Choose 1 of ${opp.name}'s Pokémon to discard an Energy from`,
+        "oppPokemon",
+        slotKeys(opp).filter((k) => slotAt(opp, k)!.energy.length),
+        1,
+      );
     case "discardStadium": {
       const s = state.stadium!;
       state.players[s.owner].discard.push(s.card);
@@ -236,7 +286,16 @@ export const MANUAL_RESUME: Record<string, (state: PState, seat: Seat, picks: st
     const p = state.players[seat];
     if (data.step === "from") {
       // The Energy attached most recently is the one that moves.
-      ask(state, { seat, title: "Choose the Pokémon to move it to", zone: "myPokemon", options: slotKeys(p).filter((k) => k !== picks[0]), min: 1, max: 1, effect: "manual:moveEnergy", data: { step: "to", from: picks[0] } });
+      ask(state, {
+        seat,
+        title: "Choose the Pokémon to move it to",
+        zone: "myPokemon",
+        options: slotKeys(p).filter((k) => k !== picks[0]),
+        min: 1,
+        max: 1,
+        effect: "manual:moveEnergy",
+        data: { step: "to", from: picks[0] },
+      });
       return;
     }
     const from = slotAt(p, data.from as SlotKey)!;
@@ -258,7 +317,16 @@ function attachEnergyFrom(where: "deck" | "discard") {
   return (state: PState, seat: Seat, picks: string[], data: Data) => {
     const p = state.players[seat];
     if (data.step === "energy") {
-      ask(state, { seat, title: "Choose a Pokémon to attach it to", zone: "myPokemon", options: slotKeys(p), min: 1, max: 1, effect: `manual:energyFrom${where === "deck" ? "Deck" : "Discard"}`, data: { step: "target", energy: picks[0] } });
+      ask(state, {
+        seat,
+        title: "Choose a Pokémon to attach it to",
+        zone: "myPokemon",
+        options: slotKeys(p),
+        min: 1,
+        max: 1,
+        effect: `manual:energyFrom${where === "deck" ? "Deck" : "Discard"}`,
+        data: { step: "target", energy: picks[0] },
+      });
       return;
     }
     const pile = where === "deck" ? p.deck : p.discard;
