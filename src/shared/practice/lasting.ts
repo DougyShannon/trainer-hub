@@ -46,7 +46,11 @@ export type MarkKind =
   /** While Asleep, flip 2 coins in Pokémon Checkup instead of 1; if either is tails, it stays Asleep. Lasts until it wakes up (any `turn`). */
   | "deepSleep"
   /** At the end of the turn `turn`, put `amount` damage counters on this Pokémon. */
-  | "endCounters";
+  | "endCounters"
+  /** At the end of the turn `turn`, this Pokémon is Knocked Out. */
+  | "koAtEnd"
+  /** At the end of the turn `turn`, this Pokémon and all attached cards are discarded. */
+  | "discardAtEnd";
 
 export type Mark = { kind: MarkKind; turn: number; amount?: number; data?: string; source?: string };
 

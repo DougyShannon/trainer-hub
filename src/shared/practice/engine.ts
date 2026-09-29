@@ -403,6 +403,48 @@ export function usableAttacks(state: PState, seat: Seat): number[] {
     .filter((i) => i >= 0);
 }
 
+/** "This attack can be used even if this Pokémon is on the Bench." */
+export const usableFromBench = (attack: Attack) => /This attack can be used even if this Pokémon is on the Bench\./i.test(attack.text ?? "");
+
+/** Why a Benched Pokémon can't use this attack right now, or null. */
+export function benchAttackReason(state: PState, seat: Seat, bench: number, index: number): string | null {
+  const p = state.players[seat];
+  const slot = p.bench[bench];
+  const attack = slot && attacksOf(state, slot)[index];
+  if (!slot || !attack || !usableFromBench(attack)) return "Only attacks that say so can be used from the Bench.";
+  if (state.turn === 1 && !attacksFirstTurn(state, seat)) return "The player who goes first can't attack on their first turn.";
+  if (!canPay(attackCost(state, slot, attack), slot.energy, state)) return `${attack.name} needs more Energy.`;
+  const all = locksOn(state, seat, "attack")[0];
+  if (all) return `${all.source} stops your Pokémon attacking this turn.`;
+  return attackBlock(state, seat);
+}
+
+/** A Benched Pokémon attacks: it stands in as the Active Pokémon while the attack is worked out. */
+function attackFromBench(state: PState, seat: Seat, bench: number, index: number) {
+  const p = state.players[seat];
+  const opp = state.players[otherSeat(seat)];
+  const why = benchAttackReason(state, seat, bench, index);
+  if (why) fail(why);
+  if (!opp.active) fail("Your opponent has no Active Pokémon.");
+  const slot = p.bench[bench];
+  const attack = attacksOf(state, slot)[index];
+  const active = p.active;
+  p.active = slot;
+  if (active) p.bench[bench] = active;
+  else p.bench.splice(bench, 1);
+  state.attacking = seat;
+  log(state, seat, `${topCard(slot).name} attacked from the Bench.`);
+  resolveAttack(state, seat, attack);
+  // Put them back where they were (unless the attack moved them).
+  if (p.active === slot && (!active || p.bench[bench] === active)) {
+    p.active = active;
+    if (active) p.bench[bench] = slot;
+    else p.bench.splice(bench, 0, slot);
+  }
+  state.pendingEnd = true;
+  return settle(state);
+}
+
 export function cantRetreatReason(state: PState, seat: Seat): string | null {
   const p = state.players[seat];
   if (!p.active) return "You have no Active Pokémon.";
@@ -639,6 +681,7 @@ export function applyPractice(state: PState, seat: Seat, action: PAction) {
 
     case "attack": {
       mustBeYourTurn(state, seat);
+      if (action.bench !== undefined) return attackFromBench(state, seat, action.bench, action.index);
       const reason = cantAttackReason(state, seat);
       if (reason) fail(reason);
       const attacker = p.active!;
@@ -862,7 +905,8 @@ function endTurn(state: PState) {
   // Paralysis wears off at the end of its owner's turn.
   const mine = state.players[seat].active;
   if (mine) mine.conditions = mine.conditions.filter((c) => c !== "paralyzed");
-  checkup(state);
+  // Star Chronos skips Pokémon Checkup before the extra turn.
+  if (state.extraTurn !== seat) checkup(state);
   if (state.status !== "playing") return;
   if (state.prompt) {
     // A Knock Out during Pokémon Checkup needs a new Active first; carry on once it's chosen.
@@ -875,7 +919,9 @@ function endTurn(state: PState) {
 
 function nextTurn(state: PState) {
   state.turn++;
-  state.current = otherSeat(state.current);
+  // Star Chronos: "Take another turn after this one."
+  if (state.extraTurn === state.current) state.extraTurn = undefined;
+  else state.current = otherSeat(state.current);
   startTurn(state);
 }
 

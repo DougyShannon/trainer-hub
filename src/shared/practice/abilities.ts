@@ -71,6 +71,8 @@ export function lockedByAbility(state: PState, slot: PSlot): boolean {
   const c = topCard(slot);
   if (!c.abilities.length) return false;
   const owner = ownerOf(state, slot);
+  // Ancient Star: "Your opponent's Pokémon V in play, except any Aerodactyl VSTAR, have no Abilities."
+  if (isV(c) && c.name !== "Aerodactyl VSTAR" && inPlay(state.players[otherSeat(owner)]).some((s) => s.gained?.includes("Ancient Star"))) return true;
   const active = isActive(state, slot);
   for (const seat of ["p1", "p2"] as Seat[]) {
     for (const lock of inPlay(state.players[seat])) {
@@ -296,6 +298,9 @@ export function weaknessesOf(state: PState, defender: PSlot) {
   const changed = marksOn(state, defender, "weakness")[0];
   if (changed) return [{ type: changed.data ?? "Colorless", value: "×2" }];
   if (ofType(d, "Dragon") && anywhere(state, otherSeat(ownerOf(state, defender)), "Fairy Zone")) return [{ type: "Psychic", value: "×2" }];
+  // Star Cipher: "The Weakness of each of your opponent's Pokémon in play is now Psychic."
+  if (inPlay(state.players[otherSeat(ownerOf(state, defender))]).some((s) => s.gained?.includes("Star Cipher")))
+    return d.weaknesses.map((w) => ({ ...w, type: "Psychic" }));
   return d.weaknesses;
 }
 /** A Pokémon's types, with Abilities that add types (Scovillain, Iron Treads). */

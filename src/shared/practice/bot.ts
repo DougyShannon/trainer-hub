@@ -22,6 +22,8 @@ import {
   slotKeys,
   topCard,
   usableAttacks,
+  usableFromBench,
+  benchAttackReason,
   attacksOf,
   isStadium,
   BENCH_SIZE,
@@ -276,6 +278,11 @@ function mainPhase(state: PState, seat: Seat, skill: BotSkill): PAction {
       if (value > bestValue) [best, bestValue] = [i, value];
     }
     if (bestValue > 0) return { type: "attack", index: best };
+  }
+  // A Benched Pokémon with an attack it can use from the Bench.
+  for (const [b, slot] of p.bench.entries()) {
+    const i = attacksOf(state, slot).findIndex((a, k) => usableFromBench(a) && !benchAttackReason(state, seat, b, k));
+    if (i >= 0) return { type: "attack", index: i, bench: b };
   }
   return { type: "endTurn" };
 }

@@ -26,6 +26,8 @@ import {
   slotKeys,
   topCard,
   usableAttacks,
+  usableFromBench,
+  benchAttackReason,
 } from "../../shared/practice/engine";
 import type { PAction, PCard, PPlayer, PSlot, PState, SlotKey } from "../../shared/practice/types";
 import { sprite } from "../lib/sprites";
@@ -376,7 +378,10 @@ function PokemonInfo({ state, seat, slotKey, mine, act }: { state: PState; seat:
         const cost = attackCost(state, slot, a);
         const payable = canPay(cost, slot.energy, state);
         const fromTool = i >= top.attacks.length;
-        const usable = mine && slotKey === "active" && myTurn && !attackBlock && payable;
+        const benchIndex = slotKey.startsWith("bench:") ? Number(slotKey.split(":")[1]) : -1;
+        const fromBench = mine && myTurn && benchIndex >= 0 && usableFromBench(a);
+        const benchWhy = fromBench ? benchAttackReason(state, seat, benchIndex, i) : null;
+        const usable = (mine && slotKey === "active" && myTurn && !attackBlock && payable) || (fromBench && !benchWhy);
         return (
           <div key={a.name + i} className={`practice-attack${usable ? " ready" : ""}`}>
             <div className="practice-attack-head">
@@ -386,14 +391,14 @@ function PokemonInfo({ state, seat, slotKey, mine, act }: { state: PState; seat:
               <span className="practice-dmg">{a.damage}</span>
             </div>
             {a.text && <span className="small">{a.text}</span>}
-            {mine && slotKey === "active" && myTurn && (
+            {((mine && slotKey === "active" && myTurn) || fromBench) && (
               <button
                 type="button"
                 className={usable ? "primary-btn small" : "secondary-btn small"}
                 disabled={!usable}
-                onClick={() => act({ type: "attack", index: i })}
+                onClick={() => act(fromBench ? { type: "attack", index: i, bench: benchIndex } : { type: "attack", index: i })}
               >
-                {usable ? `Use ${a.name}` : (attackBlock ?? "Needs more Energy")}
+                {usable ? `Use ${a.name}${fromBench ? " from the Bench" : ""}` : fromBench ? benchWhy : (attackBlock ?? "Needs more Energy")}
               </button>
             )}
           </div>

@@ -322,6 +322,7 @@ export function hitWithAttack(state: PState, seat: Seat, attacker: PSlot, defend
   }
   if (damage <= 0) return;
   defender.damage += damage;
+  defender.lastHit = { turn: state.turn, amount: (defender.lastHit?.turn === state.turn ? defender.lastHit.amount : 0) + damage };
   const endure = marksOn(state, defender, "endure")[0];
   if (endure && fullHp && defender.damage >= maxHp(state, defender)) {
     defender.damage = maxHp(state, defender) - (endure.amount ?? 10);
@@ -449,13 +450,35 @@ export function retreatBlock(state: PState, seat: Seat, slot: PSlot): string | n
   return null;
 }
 
+/**
+ * An attack's own other cost when its condition holds: "If this Pokémon has any damage counters on it,
+ * this attack can be used for [D]", "If you have no cards in your hand, ...", "If this Pokémon has a
+ * Future Booster Energy Capsule attached, ...", "... ignore all Energy in this attack's cost".
+ */
+function otherCost(state: PState, slot: PSlot, text: string): string[] | null {
+  const alt = text.match(/If ([^.]+?), this attack can be used for ((?:[A-Z][a-z]+)+)(?: Energy)?\./);
+  const ignore = /If this Pokémon is affected by a Special Condition, ignore all Energy in this attack's cost\./i.test(text);
+  if (ignore) return slot.conditions.length ? [] : null;
+  if (!alt) return null;
+  const when = alt[1];
+  const hand = state.players[ownerOf(state, slot)].hand;
+  const tool = when.match(/^this Pokémon has an? (.+?) attached$/);
+  const holds =
+    when === "this Pokémon has any damage counters on it"
+      ? slot.damage > 0
+      : when === "you have no cards in your hand"
+        ? !hand.length
+        : tool
+          ? hasTool(state, slot, tool[1])
+          : false;
+  return holds ? alt[2].match(/[A-Z][a-z]+/g)! : null;
+}
+
 /** An attack's Energy cost after Tools, the Stadium and attack effects. */
 export function attackCost(state: PState, slot: PSlot, attack: { name?: string; cost: string[]; text?: string }) {
   const c = topCard(slot);
   const owner = ownerOf(state, slot);
-  // "If this Pokémon has any damage counters on it, this attack can be used for [D]."
-  const cheaper = attack.text?.match(/If this Pokémon has any damage counters on it, this attack can be used for (\w+?)(?: Energy)?\./i);
-  const cost = (cheaper && slot.damage > 0 ? [cheaper[1]] : attack.cost).filter((x) => x !== "Free");
+  const cost = (otherCost(state, slot, attack.text ?? "") ?? attack.cost).filter((x) => x !== "Free");
   const lessColorless = () => {
     const i = cost.lastIndexOf("Colorless");
     if (i >= 0) cost.splice(i, 1);
@@ -726,6 +749,19 @@ export function endOfTurn(state: PState) {
       for (const m of marksOn(state, slot, "endCounters")) {
         slot.damage += (m.amount ?? 0) * 10;
         log(state, s, `${m.source ?? "An attack's effect"} put ${plural(m.amount ?? 0, "damage counter")} on ${topCard(slot).name}.`);
+      }
+      const ko = marksOn(state, slot, "koAtEnd")[0];
+      if (ko) {
+        slot.damage = Math.max(slot.damage, maxHp(state, slot));
+        log(state, s, `${ko.source ?? "An attack's effect"} Knocks Out ${topCard(slot).name}.`);
+      }
+      const gone = marksOn(state, slot, "discardAtEnd")[0];
+      if (gone) {
+        const owner = state.players[s];
+        owner.discard.push(...slot.pokemon, ...attachedTo(slot));
+        if (owner.active === slot) owner.active = null;
+        else owner.bench.splice(owner.bench.indexOf(slot), 1);
+        log(state, s, `${gone.source ?? "An attack's effect"} discarded ${topCard(slot).name} and all attached cards.`);
       }
     }
   }

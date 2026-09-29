@@ -632,8 +632,39 @@ export const rules6 = (): AttackRule[] => [
     },
   },
   // ----- Hooks in the engine and effects.ts -----
-  // The cheaper cost is worked out in attackCost (effects.ts); nothing to do once the attack is used.
-  { re: /If this Pokémon has any damage counters on it, this attack can be used for \w+(?: Energy)?\./i },
+  // Other costs are worked out in attackCost (effects.ts), and attacking from the Bench in engine.ts; nothing to do once the attack is used.
+  { re: /If [^.]+?, this attack can be used for (?:[A-Z][a-z]+)+(?: Energy)?\./ },
+  { re: /If this Pokémon is affected by a Special Condition, ignore all Energy in this attack's cost\./i },
+  { re: /This attack can be used even if this Pokémon is on the Bench\./i },
+  {
+    re: /If this Pokémon was damaged by an attack during your opponent's last turn, this attack does that much more damage\./i,
+    pre: (ctx) => {
+      const hit = ctx.attacker.lastHit;
+      if (hit && hit.turn === ctx.state.turn - 1) ctx.base += hit.amount;
+    },
+  },
+  {
+    re: /At the end of your opponent's next turn, the Defending Pokémon will be Knocked Out\./i,
+    post: (ctx) => markDefender(ctx, "koAtEnd", `will be Knocked Out at the end of ${ctx.opp.name}'s next turn`),
+  },
+  {
+    re: /At the end of your opponent's next turn, discard the Defending Pokémon and all attached cards\./i,
+    post: (ctx) => markDefender(ctx, "discardAtEnd", `will be discarded at the end of ${ctx.opp.name}'s next turn`),
+  },
+  {
+    re: /Take another turn after this one\./i,
+    post: (ctx) => {
+      ctx.state.extraTurn = ctx.seat;
+      log(ctx.state, ctx.seat, `${ctx.p.name} will take another turn after this one.`);
+    },
+  },
+  {
+    re: /Until this Pokémon leaves play, it gains an Ability that has the effect "[^"]+"/i,
+    post: (ctx) => {
+      (ctx.attacker.gained ??= []).push(ctx.attack.name);
+      log(ctx.state, ctx.seat, `${topCard(ctx.attacker).name} gained an Ability from ${ctx.attack.name}.`);
+    },
+  },
   {
     re: /During Pokémon Checkup, (your opponent flips|flip) 2 coins instead of 1\. If either of them is tails, (that|this) Pokémon is still Asleep\./i,
     post: (ctx, m) => {
