@@ -29,7 +29,6 @@ import {
 } from "../../shared/practice/engine";
 import type { PAction, PCard, PPlayer, PSlot, PState, SlotKey } from "../../shared/practice/types";
 import { sprite } from "../lib/sprites";
-import { ByHandPanel, type ByHandFor } from "./ByHand";
 import { CardSummary, CardText, useCardDetail } from "./CardFacts";
 import { CardPreview, GameCard } from "./GameTable";
 import { CardZoom } from "./CardZoom";
@@ -42,7 +41,6 @@ import { MATS, matById, matFor, type Mat } from "../boards/library";
 import { useBoardPrefs } from "../boards/prefs";
 import { newestTurnFirst } from "../lib/log";
 import { cardActions } from "../../shared/practice/actions";
-import { isAutomatedAbility } from "../../shared/practice/abilities";
 import { attachedTo, benchLimit, toolRoom, toolsOn } from "../../shared/practice/effects";
 import { venueById } from "../../shared/venues";
 
@@ -299,8 +297,8 @@ function Cost({ cost }: { cost: string[] }) {
 }
 
 /**
- * What a player can do with an Ability: a Use button for ones you choose to use, a note for ones
- * the game applies by itself, and the By hand moves for the few it can't do yet.
+ * What a player can do with an Ability: a Use button for ones you choose to use, or a note saying
+ * the game applies it by itself.
  */
 function AbilityControl({
   state,
@@ -310,7 +308,6 @@ function AbilityControl({
   mine,
   myTurn,
   act,
-  byHand,
 }: {
   state: PState;
   seat: Seat;
@@ -319,7 +316,6 @@ function AbilityControl({
   mine: boolean;
   myTurn: boolean;
   act: (a: PAction) => void;
-  byHand: (about: ByHandFor) => void;
 }) {
   const action = mine ? cardActions(state, seat).find((x) => x.id === `ab:${card.uid}:${ability.name}`) : undefined;
   if (action) {
@@ -332,45 +328,12 @@ function AbilityControl({
       </>
     );
   }
-  if (isAutomatedAbility(ability.name, ability.text)) {
-    const choice = /^(Once during your turn, when|When you play|you may)/i.test(ability.text) || /\byou may\b/.test(ability.text);
-    return <span className="small muted">{choice ? "The game asks if you want to use it when it happens." : "The game does this for you."}</span>;
-  }
-  return mine && myTurn ? (
-    <button
-      type="button"
-      className="secondary-btn small"
-      onClick={() =>
-        byHand({
-          card,
-          text: [`${ability.name}: ${ability.text}`],
-          why: "The game can't do this Ability for you yet. Do what it says with these moves.",
-        })
-      }
-    >
-      Use {ability.name} by hand
-    </button>
-  ) : (
-    <span className="small muted">The game can't do this Ability yet: its owner does what it says with the By hand moves.</span>
-  );
+  const choice = /^(Once during your turn, when|When you play|you may)/i.test(ability.text) || /\byou may\b/.test(ability.text);
+  return <span className="small muted">{choice ? "The game asks if you want to use it when it happens." : "The game does this for you."}</span>;
 }
 
 /** Everything about a Pokémon in play, with its attacks (as buttons when it's yours and Active). */
-function PokemonInfo({
-  state,
-  seat,
-  slotKey,
-  mine,
-  act,
-  byHand,
-}: {
-  state: PState;
-  seat: Seat;
-  slotKey: SlotKey;
-  mine: boolean;
-  act: (a: PAction) => void;
-  byHand: (about: ByHandFor) => void;
-}) {
+function PokemonInfo({ state, seat, slotKey, mine, act }: { state: PState; seat: Seat; slotKey: SlotKey; mine: boolean; act: (a: PAction) => void }) {
   const p = state.players[seat];
   const slot = slotAt(p, slotKey);
   const [retreating, setRetreating] = useState(false);
@@ -406,7 +369,7 @@ function PokemonInfo({
             {a.type}: {a.name}
           </strong>
           <span className="small">{a.text}</span>
-          <AbilityControl state={state} seat={seat} card={top} ability={a} mine={mine} myTurn={myTurn} act={act} byHand={byHand} />
+          <AbilityControl state={state} seat={seat} card={top} ability={a} mine={mine} myTurn={myTurn} act={act} />
         </div>
       ))}
       {attacksOf(state, slot).map((a, i) => {
@@ -608,7 +571,7 @@ function practiceHow(card: PCard): string {
 }
 
 /** Every option in a practice turn, with whether you can do it right now and which buttons to press. */
-function practiceGuide(state: PState, me: Seat, open: (key: SlotKey) => void, byHand: () => void): GuideRow[] {
+function practiceGuide(state: PState, me: Seat, open: (key: SlotKey) => void): GuideRow[] {
   const p = state.players[me];
   const hand = p.hand;
   const openActive = {
@@ -889,7 +852,6 @@ export function PracticeTable({
   const [confirmConcede, setConfirmConcede] = useState(false);
   // The turn guide option whose cards are raised in your hand.
   const [raise, setRaise] = useState<{ what: string; cards: string[] } | null>(null);
-  const [byHand, setByHand] = useState<ByHandFor | "closed">("closed");
   const prefs = useBoardPrefs();
   const mats = prefs.layout === "mats";
   const myMat = matById(prefs.mat) ?? MATS[0];
@@ -897,18 +859,7 @@ export function PracticeTable({
   const theirMat = matFor(venueById(opponent.venue)?.type, myMat.id);
   const backdrop = backdropProps(prefs);
 
-  // Playing a card the game can't resolve opens the By hand moves with the card's text.
   const play = (a: PAction) => {
-    if (a.type === "playTrainer") {
-      const card = mine.hand.find((c) => c.uid === a.uid);
-      if (card && !isAutomated(card) && !isStadium(card) && !cantPlayTrainerReason(state, me, card)) {
-        setByHand({
-          card,
-          text: cardText(card),
-          why: "The game doesn't do this card's effect for you. Do what it says with these moves, then press Done.",
-        });
-      }
-    }
     setRaise(null);
     act(a);
   };
@@ -959,9 +910,6 @@ export function PracticeTable({
     });
   }, [lastLog, mine.hand, state.players]);
 
-  useEffect(() => {
-    if (!myTurn) setByHand("closed");
-  }, [myTurn]);
   // Raised cards drop back once anything happens or the turn passes.
   useEffect(() => setRaise(null), [lastLog, canAct]);
   useEffect(() => {
@@ -1039,17 +987,6 @@ export function PracticeTable({
               {a.label}
             </button>
           ))}
-        {state.status === "playing" && (
-          <button
-            type="button"
-            className="secondary-btn small"
-            disabled={!canAct}
-            onClick={() => setByHand(null)}
-            title="Do what a card says when the game doesn't do it for you"
-          >
-            By hand
-          </button>
-        )}
         {state.status === "playing" && (
           <button type="button" className="primary-btn small" disabled={!canAct} onClick={() => act({ type: "endTurn" })}>
             End turn
@@ -1234,17 +1171,7 @@ export function PracticeTable({
                     : "Press Retreat your Active and send this in to swap it into the Active Spot (it costs your Active's Retreat cost)."
                   : null
               }
-              body={
-                <PokemonInfo
-                  key={`${sel.side}${sel.key}`}
-                  state={state}
-                  seat={sel.side}
-                  slotKey={sel.key}
-                  mine={sel.side === me}
-                  act={act}
-                  byHand={setByHand}
-                />
-              }
+              body={<PokemonInfo key={`${sel.side}${sel.key}`} state={state} seat={sel.side} slotKey={sel.key} mine={sel.side === me} act={act} />}
             />
           ) : (
             <div className="action-panel idle">
@@ -1268,12 +1195,7 @@ export function PracticeTable({
           {canAct && (
             <TurnGuide
               title="Your turn: what you can do"
-              rows={practiceGuide(
-                state,
-                me,
-                (key) => setSel({ kind: "slot", side: me, key }),
-                () => setByHand(null),
-              )}
+              rows={practiceGuide(state, me, (key) => setSel({ kind: "slot", side: me, key }))}
               picked={raise?.what}
               onPick={(row) => setRaise(row ? { what: row.what, cards: row.cards ?? [] } : null)}
             />
@@ -1303,7 +1225,6 @@ export function PracticeTable({
       {state.prompt?.seat === me && state.status !== "finished" && <ChoiceModal state={state} me={me} act={act} />}
 
       {/* Hidden while one of its moves waits on a choice, then back for the next move. */}
-      {byHand !== "closed" && canAct && <ByHandPanel state={state} me={me} act={act} about={byHand} close={() => setByHand("closed")} />}
 
       {pile && (
         <div className="modal-backdrop" onClick={() => setPile(null)}>

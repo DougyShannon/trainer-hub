@@ -92,7 +92,8 @@ type Match = (c: PCard) => boolean;
 export const isSpecialEnergy = (c: PCard) => isEnergy(c) && !isBasicEnergy(c);
 const isBasicOf = (owner: string) => (c: PCard) => isBasicPokemon(c) && trainersPokemon(c, owner);
 const pokemonOfType = (type: string) => (c: PCard) => isPokemon(c) && ofType(c, type);
-export const energyOf = (type: string) => (c: PCard) => isEnergy(c) && energyProvides(c).some((u) => unitIs(u, type)) && (isBasicEnergy(c) || c.name.includes(type));
+export const energyOf = (type: string) => (c: PCard) =>
+  isEnergy(c) && energyProvides(c).some((u) => unitIs(u, type)) && (isBasicEnergy(c) || c.name.includes(type));
 const koLastTurn = (state: PState, seat: Seat) => me(state, seat).koTurn === state.turn - 1;
 const firstTurn = (state: PState) => state.turn <= 2;
 export const keyIndex = (key: string) => Number(key.split(":")[1]);

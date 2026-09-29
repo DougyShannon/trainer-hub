@@ -321,7 +321,9 @@ export function resolveAttack(state: PState, seat: Seat, attack: Attack) {
   }
 
   // ----- Damage to the opponent's Active Pokémon -----
-  let damage = ctx.skipDamage ? 0 : finalDamage(state, seat, attacker, defender, base, ctx.noWeakness ? `${text} This attack's damage isn't affected by Weakness or Resistance.` : text);
+  let damage = ctx.skipDamage
+    ? 0
+    : finalDamage(state, seat, attacker, defender, base, ctx.noWeakness ? `${text} This attack's damage isn't affected by Weakness or Resistance.` : text);
   const protect = defender.effects.protect?.turn === state.turn ? defender.effects.protect : null;
   const guard = defender.effects.guard?.turn === state.turn ? defender.effects.guard.amount : 0;
   if (protect && damage > 0) {

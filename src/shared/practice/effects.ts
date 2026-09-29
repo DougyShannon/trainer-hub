@@ -279,7 +279,10 @@ export function damageTaken(state: PState, seat: Seat, attacker: PSlot, defender
   for (const t of toolNames(state, defender)) if (BERRIES[t] && ofType(a, BERRIES[t])) less += 60;
   if (stadiumOn(state, "Granite Cave", defender) && trainersPokemon(d, "Steven")) less += 30;
   if (stadiumOn(state, "Full Metal Lab", defender) && ofType(d, "Metal")) less += 30;
-  if (stadiumOn(state, "Lake Acuity", defender) && defender.energy.some((e) => energyProvides(e, state).some((t) => unitIs(t, "Water") || unitIs(t, "Fighting"))))
+  if (
+    stadiumOn(state, "Lake Acuity", defender) &&
+    defender.energy.some((e) => energyProvides(e, state).some((t) => unitIs(t, "Water") || unitIs(t, "Fighting")))
+  )
     less += 20;
   for (const e of effectsNow(state, "damageDown")) {
     if (e.seat === owner && (!e.type || ofType(d, e.type)) && matchesVs(a, e.vs)) less += e.amount ?? 0;

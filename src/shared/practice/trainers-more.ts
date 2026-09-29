@@ -1,6 +1,6 @@
 // More Trainer cards that practice games play automatically: the everyday draw, search, heal,
 // recover and switch cards in the Standard format. Built from a few shared shapes so each card
-// is a line or two. Cards that aren't here or in trainers.ts are resolved "by hand" (manual.ts).
+// is a line or two. The rest are in trainers.ts and trainers-extra.ts.
 
 import { otherSeat, type Seat } from "../game-types";
 import {

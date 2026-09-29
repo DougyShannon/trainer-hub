@@ -184,8 +184,6 @@ export type TurnEffect = {
 
 export type SlotKey = "active" | `bench:${number}`;
 
-import type { ManualOp } from "./manual";
-
 export type PAction =
   | { type: "setup"; active: string; bench: string[] }
   | { type: "playBasic"; uid: string }
@@ -197,7 +195,6 @@ export type PAction =
   | { type: "attack"; index: number }
   | { type: "choose"; picks: string[] }
   | { type: "endTurn" }
-  | { type: "byHand"; op: ManualOp; amount?: number }
   /** A card action that isn't playing a card, like using a Stadium (see cardActions in effects.ts). */
   | { type: "special"; id: string }
   | { type: "concede" };

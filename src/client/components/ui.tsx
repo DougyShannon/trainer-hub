@@ -4,8 +4,24 @@ import type { CardSummary } from "../lib/api";
 export const TCG_TYPES = ["Grass", "Fire", "Water", "Lightning", "Psychic", "Fighting", "Darkness", "Metal", "Fairy", "Dragon", "Colorless"];
 
 export const GAME_TYPES = [
-  "normal", "fire", "water", "electric", "grass", "ice", "fighting", "poison", "ground",
-  "flying", "psychic", "bug", "rock", "ghost", "dragon", "dark", "steel", "fairy",
+  "normal",
+  "fire",
+  "water",
+  "electric",
+  "grass",
+  "ice",
+  "fighting",
+  "poison",
+  "ground",
+  "flying",
+  "psychic",
+  "bug",
+  "rock",
+  "ghost",
+  "dragon",
+  "dark",
+  "steel",
+  "fairy",
 ];
 
 const capitalise = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -16,8 +32,18 @@ export function TypeBadge({ type }: { type: string }) {
 }
 
 const ENERGY_LETTER: Record<string, string> = {
-  Grass: "G", Fire: "R", Water: "W", Lightning: "L", Psychic: "P", Fighting: "F",
-  Darkness: "D", Metal: "M", Fairy: "Y", Dragon: "N", Colorless: "C", Free: "–",
+  Grass: "G",
+  Fire: "R",
+  Water: "W",
+  Lightning: "L",
+  Psychic: "P",
+  Fighting: "F",
+  Darkness: "D",
+  Metal: "M",
+  Fairy: "Y",
+  Dragon: "N",
+  Colorless: "C",
+  Free: "–",
 };
 
 /** A TCG Energy symbol, drawn as a coloured coin with the standard letter. */
@@ -36,11 +62,7 @@ export function Energy({ type }: { type: string }) {
 export function CardThumb({ card }: { card: CardSummary }) {
   return (
     <Link to={`/cards/${card.id}`} className="card-thumb">
-      {card.image ? (
-        <img src={card.image} alt={card.name} loading="lazy" width={245} height={342} />
-      ) : (
-        <div className="card-missing">{card.name}</div>
-      )}
+      {card.image ? <img src={card.image} alt={card.name} loading="lazy" width={245} height={342} /> : <div className="card-missing">{card.name}</div>}
       <span className="card-thumb-name">{card.name}</span>
       <span className="card-thumb-meta">
         {card.setName} · {card.number}

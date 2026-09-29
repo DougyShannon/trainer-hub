@@ -14,7 +14,6 @@ import { ANY, boomerangsAfter, boomerangsBefore, energyAttachBlock, specialOnEvo
 import { trainerFor } from "./trainers";
 import { FIRST_TURN_SUPPORTERS } from "./trainers-more";
 import { FIRST_TURN_EXTRA } from "./trainers-extra";
-import { applyManual, MANUAL_RESUME } from "./manual";
 import {
   addTool,
   attachedTo,
@@ -592,7 +591,7 @@ export function applyPractice(state: PState, seat: Seat, action: PAction) {
       const effect = trainerFor(card.name);
       log(state, seat, `${p.name} played ${card.name}.`);
       if (!effect) {
-        log(state, seat, `Do what ${card.name} says with the "By hand" moves.`, "system");
+        log(state, seat, `The game doesn't know what ${card.name} does yet.`, "system");
         return;
       }
       effect.play(state, seat, card);
@@ -649,7 +648,12 @@ export function applyPractice(state: PState, seat: Seat, action: PAction) {
         const n = m.amount ?? 1;
         let tails = false;
         for (let i = 0; i < n; i++) if (!flip()) tails = true;
-        log(state, seat, `${m.source ?? "An attack's effect"}: ${p.name} flipped ${n === 1 ? "a coin" : `${n} coins`} and got ${tails ? "tails" : "all heads"}.`, "coin");
+        log(
+          state,
+          seat,
+          `${m.source ?? "An attack's effect"}: ${p.name} flipped ${n === 1 ? "a coin" : `${n} coins`} and got ${tails ? "tails" : "all heads"}.`,
+          "coin",
+        );
         if (tails) {
           log(state, seat, `${attack.name} didn't happen.`, "attack");
           state.pendingEnd = true;
@@ -678,12 +682,6 @@ export function applyPractice(state: PState, seat: Seat, action: PAction) {
     case "special": {
       mustBeYourTurn(state, seat);
       runCardAction(state, seat, action.id);
-      return settle(state);
-    }
-
-    case "byHand": {
-      mustBeYourTurn(state, seat);
-      applyManual(state, seat, action.op, action.amount);
       return settle(state);
     }
 
@@ -763,12 +761,11 @@ export function resolvePrompt(state: PState, seat: Seat, picks: string[]) {
     attackRuleResume(prompt.effect) ??
     EFFECT_RESUME[prompt.effect] ??
     ABILITY_RESUME[prompt.effect] ??
-    MANUAL_RESUME[prompt.effect] ??
     abilityEffect(prompt.effect)?.resume ??
     trainerFor(prompt.effect)?.resume ??
     actionEffect(prompt.effect)?.resume;
-  if (!resume) fail("Unknown choice.");
-  resume!(state, seat, unique, prompt.data ?? {});
+  // A saved game can hold a choice from a version that worked differently: just move on.
+  if (resume) resume(state, seat, unique, prompt.data ?? {});
   if (!state.prompt && state.queue.length) state.prompt = state.queue.shift()!;
   settle(state);
 }
