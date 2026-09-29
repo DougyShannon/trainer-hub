@@ -37,6 +37,7 @@ import { Energy } from "./ui";
 import { BoardButton, HalfMat, MatPile, backdropProps } from "./Mat";
 import { MATS, matById, matFor, type Mat } from "../boards/library";
 import { useBoardPrefs } from "../boards/prefs";
+import { newestTurnFirst } from "../lib/log";
 import { venueById } from "../../shared/venues";
 
 type Sel = { kind: "hand"; uid: string } | { kind: "slot"; side: Seat; key: SlotKey } | null;
@@ -789,10 +790,10 @@ export function PracticeTable({
   const logList = useRef<HTMLOListElement>(null);
   const lastLog = state.log[state.log.length - 1]?.n;
 
-  // Keep the newest log line in view.
+  // Keep the newest turn (at the top) in view.
   useEffect(() => {
     const el = logList.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el) el.scrollTop = 0;
   }, [lastLog]);
 
   // Drop a selection once the card it points at has gone.
@@ -1071,7 +1072,7 @@ export function PracticeTable({
           <section className="game-log" aria-label="Game log">
             <h2 className="small">Game log</h2>
             <ol ref={logList}>
-              {state.log.map((l) => (
+              {newestTurnFirst(state.log).map((l) => (
                 <li key={l.n} className={`log-${l.kind ?? "move"}${l.seat === me ? " mine" : ""}`}>
                   {l.text}
                 </li>
