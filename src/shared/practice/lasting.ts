@@ -43,7 +43,7 @@ export type MarkKind =
   | "endure"
   /** Prevent all effects (not damage) of attacks used by the opponent's Pokémon done to this Pokémon. */
   | "effectsProof"
-  /** While Asleep, flip 2 coins in Pokémon Checkup instead of 1; if either is tails, it stays Asleep. `turn` is the Checkup's turn. */
+  /** While Asleep, flip 2 coins in Pokémon Checkup instead of 1; if either is tails, it stays Asleep. Lasts until it wakes up (any `turn`). */
   | "deepSleep"
   /** At the end of the turn `turn`, put `amount` damage counters on this Pokémon. */
   | "endCounters";

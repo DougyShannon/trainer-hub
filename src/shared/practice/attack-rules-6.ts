@@ -631,6 +631,33 @@ export const rules6 = (): AttackRule[] => [
       });
     },
   },
+  // ----- Hooks in the engine and effects.ts -----
+  // The cheaper cost is worked out in attackCost (effects.ts); nothing to do once the attack is used.
+  { re: /If this Pokémon has any damage counters on it, this attack can be used for \w+(?: Energy)?\./i },
+  {
+    re: /During Pokémon Checkup, (your opponent flips|flip) 2 coins instead of 1\. If either of them is tails, (that|this) Pokémon is still Asleep\./i,
+    post: (ctx, m) => {
+      const slot = m[2].toLowerCase() === "this" ? ctx.attacker : ctx.defender;
+      if (slot === ctx.defender && ctx.shielded) return;
+      // Lasts while it stays Asleep (see Pokémon Checkup in engine.ts).
+      mark(slot, { kind: "deepSleep", turn: ctx.state.turn, source: ctx.attack.name });
+    },
+  },
+  {
+    re: /Put (\d+) damage counters instead of 3 on that Pokémon for this Special Condition\./i,
+    post: (ctx, m) => {
+      if (ctx.shielded || ctx.opp.active !== ctx.defender) return;
+      ctx.defender.effects.confuseDamage = Number(m[1]) * 10;
+    },
+  },
+  {
+    re: /At the end of your opponent's next turn, put (\d+) damage counters on the Defending Pokémon\./i,
+    post: (ctx, m) => markDefender(ctx, "endCounters", `will get ${m[1]} damage counters at the end of ${ctx.opp.name}'s next turn`, { amount: Number(m[1]) }),
+  },
+  {
+    re: /During your opponent's next turn, prevent all effects of attacks used by your opponent's Pokémon done to this Pokémon\./i,
+    post: (ctx) => markSelf(ctx, "effectsProof", "is protected from the effects of attacks during the opponent's next turn"),
+  },
 ];
 
 export const resumes6 = (): Record<string, Resume> => ({

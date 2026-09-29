@@ -9,7 +9,7 @@ import { otherSeat, type Condition, type Seat } from "../game-types";
 import type { Attack, PAction, PCard, PPlayer, PSlot, PState, Prompt, SlotKey } from "./types";
 import { ATTACK_RESUME, resolveAttack } from "./attacks";
 import { attackRuleCanUse, attackRuleResume } from "./attack-rules";
-import { cardLocked, locked, locksOn, marked, marksOn, turnLog } from "./lasting";
+import { cardLocked, locked, locksOn, marked, marksOn, turnLog, type Mark } from "./lasting";
 import { ANY, boomerangsAfter, boomerangsBefore, energyAttachBlock, specialOnEvolve, specialProvides, unitIs } from "./special-energy";
 import { trainerFor } from "./trainers";
 import { FIRST_TURN_SUPPORTERS } from "./trainers-more";
@@ -898,9 +898,14 @@ function checkup(state: PState) {
       if (heads) slot.conditions = slot.conditions.filter((c) => c !== "burned");
     }
     if (slot.conditions.includes("asleep")) {
-      const heads = heavySleeper(state, slot) || marked(state, slot, "deepSleep") ? flip() && flip() : flip();
+      const marks = slot.effects as { marks?: Mark[] };
+      const deep = (marks.marks ?? []).some((m) => m.kind === "deepSleep");
+      const heads = heavySleeper(state, slot) || deep ? flip() && flip() : flip();
       log(state, seat, `${name} is Asleep. Coin flip: ${heads ? "heads, it woke up" : "tails, still Asleep"}.`, "coin");
-      if (heads) slot.conditions = slot.conditions.filter((c) => c !== "asleep");
+      if (heads) {
+        slot.conditions = slot.conditions.filter((c) => c !== "asleep");
+        if (deep) marks.marks = marks.marks!.filter((m) => m.kind !== "deepSleep");
+      }
     }
   }
   checkupAbilities(state);

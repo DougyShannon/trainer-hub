@@ -374,7 +374,7 @@ function payRules(): AttackRule[] {
     {
       // Energy attached to Pokémon: "Discard up to 2 Energy cards from this Pokémon, and this attack does 120 damage for each card ..."
       re: R(
-        "Discard (up to (\\w+)|any amount of) (?:(\\w+) )?Energy(?: cards?)? from (this Pokémon|your Pokémon|among your Pokémon)(?:, and|\\.) [Tt]his attack does (\\d+) damage for each card you discarded in this way\\.",
+        "(?<!may )Discard (up to (\\w+)|any amount of) (?:(\\w+) )?Energy(?: cards?)? from (this Pokémon|your Pokémon|among your Pokémon)(?:, and|\\.) [Tt]his attack does (\\d+) damage for each card you discarded in this way\\.",
       ),
       pre: (ctx) => {
         ctx.skipDamage = true;
