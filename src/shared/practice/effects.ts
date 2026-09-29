@@ -450,10 +450,12 @@ export function retreatBlock(state: PState, seat: Seat, slot: PSlot): string | n
 }
 
 /** An attack's Energy cost after Tools, the Stadium and attack effects. */
-export function attackCost(state: PState, slot: PSlot, attack: { name?: string; cost: string[] }) {
+export function attackCost(state: PState, slot: PSlot, attack: { name?: string; cost: string[]; text?: string }) {
   const c = topCard(slot);
   const owner = ownerOf(state, slot);
-  const cost = attack.cost.filter((x) => x !== "Free");
+  // "If this Pokémon has any damage counters on it, this attack can be used for [D]."
+  const cheaper = attack.text?.match(/If this Pokémon has any damage counters on it, this attack can be used for (\w+?)(?: Energy)?\./i);
+  const cost = (cheaper && slot.damage > 0 ? [cheaper[1]] : attack.cost).filter((x) => x !== "Free");
   const lessColorless = () => {
     const i = cost.lastIndexOf("Colorless");
     if (i >= 0) cost.splice(i, 1);
@@ -718,6 +720,15 @@ export function endOfTurn(state: PState) {
   const p = state.players[seat];
   endOfTurnAbilities(state);
   specialEndOfTurn(state, seat);
+  // "At the end of your opponent's next turn, put N damage counters on the Defending Pokémon."
+  for (const s of [seat, otherSeat(seat)]) {
+    for (const slot of inPlay(state.players[s])) {
+      for (const m of marksOn(state, slot, "endCounters")) {
+        slot.damage += (m.amount ?? 0) * 10;
+        log(state, s, `${m.source ?? "An attack's effect"} put ${plural(m.amount ?? 0, "damage counter")} on ${topCard(slot).name}.`);
+      }
+    }
+  }
   const active = p.active;
   if (active) {
     const tool = (name: string) => hasTool(state, active, name);

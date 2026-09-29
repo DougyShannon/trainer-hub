@@ -669,8 +669,9 @@ export function applyPractice(state: PState, seat: Seat, action: PAction) {
         const heads = flip();
         log(state, seat, `${topCard(attacker).name} is Confused. Coin flip: ${heads ? "heads" : "tails"}.`, "coin");
         if (!heads) {
-          attacker.damage += 30;
-          log(state, seat, `${topCard(attacker).name} hurt itself in its confusion (30 damage).`, "attack");
+          const hurt = attacker.effects.confuseDamage ?? 30;
+          attacker.damage += hurt;
+          log(state, seat, `${topCard(attacker).name} hurt itself in its confusion (${hurt} damage).`, "attack");
           state.pendingEnd = true;
           return settle(state);
         }
@@ -897,7 +898,7 @@ function checkup(state: PState) {
       if (heads) slot.conditions = slot.conditions.filter((c) => c !== "burned");
     }
     if (slot.conditions.includes("asleep")) {
-      const heads = heavySleeper(state, slot) ? flip() && flip() : flip();
+      const heads = heavySleeper(state, slot) || marked(state, slot, "deepSleep") ? flip() && flip() : flip();
       log(state, seat, `${name} is Asleep. Coin flip: ${heads ? "heads, it woke up" : "tails, still Asleep"}.`, "coin");
       if (heads) slot.conditions = slot.conditions.filter((c) => c !== "asleep");
     }

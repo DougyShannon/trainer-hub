@@ -54,6 +54,8 @@ export type PSlot = {
     attackTax?: number;
     /** Heavier Poison, e.g. 80 damage instead of 10 during Pokémon Checkup. */
     poisonDamage?: number;
+    /** Heavier Confusion: damage when a Confused attack fails, instead of 30. */
+    confuseDamage?: number;
     protect?: { turn: number; effects: boolean };
     guard?: { turn: number; amount: number };
     boost?: { turn: number; amount: number };
