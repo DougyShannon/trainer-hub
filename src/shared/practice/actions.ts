@@ -22,9 +22,24 @@ import {
   slotKeys,
   topCard,
 } from "./engine";
-import { addEffect, baseName, benchLimit, hasRuleBox, inPlay, isFossil, isV, ofType, stadiumName, toolOf, trainersPokemon } from "./effects";
+import {
+  addEffect,
+  attachedTo,
+  baseName,
+  benchLimit,
+  hasRuleBox,
+  inPlay,
+  isFossil,
+  isV,
+  ofType,
+  stadiumName,
+  toolNames,
+  toolsOn,
+  trainersPokemon,
+} from "./effects";
 import { heal, recover, searchToHand, drawUntil, doSwitch } from "./trainers-more";
 import { me, names, pull, searchDeck, toBench, type TrainerEffect } from "./trainers";
+import { abilityActions, runAbilityAction } from "./abilities";
 import type { PCard, PState, SlotKey } from "./types";
 
 type Data = Record<string, unknown>;
@@ -493,17 +508,18 @@ export function cardActions(state: PState, seat: Seat): CardAction[] {
         card: top,
         blocked: null,
       });
-    const tool = toolOf(state, slot);
-    if (tool && SEAL_STONES()[tool] && slot.tool) {
+    for (const card of toolNames(state, slot).length ? toolsOn(slot) : []) {
+      const tool = baseName(card.name);
+      if (!SEAL_STONES()[tool]) continue;
       const blocked = !isV(top)
         ? "Only a Pokémon V can use it."
         : p.vstarUsed
           ? "You've already used a VSTAR Power this game."
-          : (SEAL_STONES()[tool].canPlay?.(state, seat, slot.tool) ?? null);
+          : (SEAL_STONES()[tool].canPlay?.(state, seat, card) ?? null);
       list.push({
-        id: `seal:${slot.tool.uid}`,
-        label: `Use ${slot.tool.abilities[0]?.name ?? tool} (${tool})`,
-        card: slot.tool,
+        id: `seal:${card.uid}`,
+        label: `Use ${card.abilities[0]?.name ?? tool} (${tool})`,
+        card,
         blocked,
       });
     }
@@ -518,10 +534,12 @@ export function cardActions(state: PState, seat: Seat): CardAction[] {
       blocked: others >= 2 ? null : "You need 2 other cards in your hand to discard.",
     });
   }
+  list.push(...abilityActions(state, seat));
   return list;
 }
 
 export function runCardAction(state: PState, seat: Seat, id: string) {
+  if (id.startsWith("ab:")) return runAbilityAction(state, seat, id);
   const action = cardActions(state, seat).find((a) => a.id === id) ?? fail("You can't do that right now.");
   if (action.blocked) fail(action.blocked);
   const p = me(state, seat);
@@ -534,7 +552,7 @@ export function runCardAction(state: PState, seat: Seat, id: string) {
   if (id.startsWith("fossil:")) {
     const key = slotKeys(p).find((k) => topCard(slotAt(p, k)!).uid === action.card.uid)!;
     const slot = slotAt(p, key)!;
-    p.discard.push(...slot.pokemon, ...slot.energy, ...(slot.tool ? [slot.tool] : []));
+    p.discard.push(...slot.pokemon, ...attachedTo(slot));
     if (key === "active") p.active = null;
     else p.bench.splice(Number(key.split(":")[1]), 1);
     log(state, seat, `${p.name} discarded ${action.card.name} from play.`);

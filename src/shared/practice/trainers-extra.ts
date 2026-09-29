@@ -26,8 +26,10 @@ import {
   topCard,
 } from "./engine";
 import { askChoice, askDiscard } from "./actions";
+import { benchEnergyGuarded } from "./abilities";
 import {
   addEffect,
+  attachedTo,
   baseName,
   benchLimit,
   deckGuarded,
@@ -39,8 +41,10 @@ import {
   isV,
   ofType,
   putCounters,
+  removeTool,
   setCondition,
   supporterProof,
+  toolsOn,
   trainersPokemon,
 } from "./effects";
 import {
@@ -84,45 +88,49 @@ type Match = (c: PCard) => boolean;
 
 // ----- Tests and small helpers -----
 
-const isSpecialEnergy = (c: PCard) => isEnergy(c) && !isBasicEnergy(c);
+export const isSpecialEnergy = (c: PCard) => isEnergy(c) && !isBasicEnergy(c);
 const isBasicOf = (owner: string) => (c: PCard) => isBasicPokemon(c) && trainersPokemon(c, owner);
 const pokemonOfType = (type: string) => (c: PCard) => isPokemon(c) && ofType(c, type);
-const energyOf = (type: string) => (c: PCard) => isEnergy(c) && energyProvides(c).includes(type) && (isBasicEnergy(c) || c.name.includes(type));
+export const energyOf = (type: string) => (c: PCard) => isEnergy(c) && energyProvides(c).includes(type) && (isBasicEnergy(c) || c.name.includes(type));
 const koLastTurn = (state: PState, seat: Seat) => me(state, seat).koTurn === state.turn - 1;
 const firstTurn = (state: PState) => state.turn <= 2;
-const keyIndex = (key: string) => Number(key.split(":")[1]);
-const slotsOf = (p: PPlayer) => slotKeys(p).map((k) => ({ key: k, slot: slotAt(p, k)! }));
+export const keyIndex = (key: string) => Number(key.split(":")[1]);
+export const slotsOf = (p: PPlayer) => slotKeys(p).map((k) => ({ key: k, slot: slotAt(p, k)! }));
 const lastPlayed = (state: PState, seat: Seat, name: string) =>
   me(state, seat)
     .discard.filter((c) => baseName(c.name) === name)
     .pop();
 
-function revealHand(state: PState, seat: Seat) {
+export function revealHand(state: PState, seat: Seat) {
   const opp = them(state, seat);
   log(state, otherSeat(seat), `${opp.name} revealed their hand: ${names(opp.hand)}.`);
 }
 
-function endTurnNow(state: PState, seat: Seat, card: string) {
+export function endTurnNow(state: PState, seat: Seat, card: string) {
   log(state, seat, `${card} ends ${me(state, seat).name}'s turn.`);
   state.pendingEnd = true;
 }
 
 /** Discards a card attached to a Pokémon (a Tool or an Energy) into its owner's discard pile. */
-function discardAttached(state: PState, owner: Seat, slot: PSlot, card: PCard) {
+export function discardAttached(state: PState, owner: Seat, slot: PSlot, card: PCard) {
   const p = state.players[owner];
-  if (slot.tool?.uid === card.uid) slot.tool = null;
+  if (owner !== state.current && isBasicEnergy(card) && benchEnergyGuarded(state, owner, slot)) {
+    log(state, owner, `Stand Sentry kept ${card.name} on ${topCard(slot).name}.`);
+    return;
+  }
+  if (toolsOn(slot).includes(card)) removeTool(slot, card.uid);
   else slot.energy = slot.energy.filter((e) => e.uid !== card.uid);
   p.discard.push(card);
   log(state, owner, `${card.name} was discarded from ${topCard(slot).name}.`);
 }
 
 /** Labelled choices for cards attached to Pokémon. The id is "seat|slotKey|uid". */
-function attachedChoices(state: PState, seats: Seat[], test: (c: PCard, slot: PSlot) => boolean) {
+export function attachedChoices(state: PState, seats: Seat[], test: (c: PCard, slot: PSlot) => boolean) {
   const list: { id: string; label: string }[] = [];
   for (const s of seats) {
     const p = state.players[s];
     for (const { key, slot } of slotsOf(p)) {
-      for (const c of [...(slot.tool ? [slot.tool] : []), ...slot.energy]) {
+      for (const c of [...toolsOn(slot), ...slot.energy]) {
         if (test(c, slot))
           list.push({
             id: `${s}|${key}|${c.uid}`,
@@ -133,16 +141,16 @@ function attachedChoices(state: PState, seats: Seat[], test: (c: PCard, slot: PS
   }
   return list;
 }
-function fromAttachedId(state: PState, id: string) {
+export function fromAttachedId(state: PState, id: string) {
   const [s, key, uid] = id.split("|");
   const seat = s as Seat;
   const slot = slotAt(state.players[seat], key as SlotKey);
-  const card = slot && [...(slot.tool ? [slot.tool] : []), ...slot.energy].find((c) => c.uid === uid);
+  const card = slot && [...toolsOn(slot), ...slot.energy].find((c) => c.uid === uid);
   return slot && card ? { seat, slot, card } : null;
 }
 
 /** Evolves a Pokémon down: the top `n` Evolution cards go to their owner's hand. */
-function devolve(state: PState, owner: Seat, slot: PSlot, n: number) {
+export function devolve(state: PState, owner: Seat, slot: PSlot, n: number) {
   const p = state.players[owner];
   const off = slot.pokemon.splice(Math.max(1, slot.pokemon.length - n));
   p.hand.push(...off);
@@ -158,8 +166,8 @@ function devolve(state: PState, owner: Seat, slot: PSlot, n: number) {
  * Attaches Energy cards one at a time to Pokémon the player picks. The cards stay where they are
  * (deck, discard pile or hand) until attached. `after` runs once all are placed.
  */
-type After = "shuffle" | "endTurn" | "draw3" | "none";
-function askAttach(
+export type After = "shuffle" | "endTurn" | "draw3" | "none";
+export function askAttach(
   state: PState,
   seat: Seat,
   effect: string,
@@ -219,7 +227,7 @@ function finishAttach(state: PState, seat: Seat, effect: string, after: After) {
 }
 
 /** Has the player choose which of `cards` (already on top of their deck) goes on top, one at a time. */
-function askOrder(state: PState, seat: Seat, effect: string, left: string[], placed: string[] = []) {
+export function askOrder(state: PState, seat: Seat, effect: string, left: string[], placed: string[] = []) {
   if (left.length <= 1) return finishOrder(state, seat, [...placed, ...left]);
   ask(state, {
     seat,
@@ -240,7 +248,7 @@ function finishOrder(state: PState, seat: Seat, order: string[]) {
 }
 
 /** Wraps a card so the attach and order chains above carry on through its resume. */
-const chain = (effect: TrainerEffect): TrainerEffect => ({
+export const chain = (effect: TrainerEffect): TrainerEffect => ({
   ...effect,
   resume(state, seat, picks, data) {
     if (data.step === "attach") {
@@ -271,7 +279,7 @@ const chain = (effect: TrainerEffect): TrainerEffect => ({
 
 // ----- Opponent's-hand cards -----
 
-function askOppHand(state: PState, seat: Seat, effect: string, title: string, match: Match, max: number, min = 0, data: Data = {}) {
+export function askOppHand(state: PState, seat: Seat, effect: string, title: string, match: Match, max: number, min = 0, data: Data = {}) {
   const opp = them(state, seat);
   revealHand(state, seat);
   const options = opp.hand.filter(match).map((c) => c.uid);
@@ -294,7 +302,7 @@ function askOppHand(state: PState, seat: Seat, effect: string, title: string, ma
 }
 
 /** The opponent discards down to `n` cards (they choose which). */
-function oppDiscardTo(state: PState, seat: Seat, target: Seat, n: number) {
+export function oppDiscardTo(state: PState, seat: Seat, target: Seat, n: number) {
   const p = state.players[target];
   const extra = p.hand.length - n;
   if (extra <= 0) return;
@@ -311,7 +319,7 @@ function oppDiscardTo(state: PState, seat: Seat, target: Seat, n: number) {
 }
 
 /** The opponent chooses their new Active Pokémon after being switched out. */
-function oppSwitchesOut(state: PState, seat: Seat) {
+export function oppSwitchesOut(state: PState, seat: Seat) {
   const opp = them(state, seat);
   if (!opp.bench.length) return;
   ask(state, {
@@ -325,7 +333,7 @@ function oppSwitchesOut(state: PState, seat: Seat) {
   });
 }
 
-function gustFrom(state: PState, seat: Seat, effect: string, supporter: boolean) {
+export function gustFrom(state: PState, seat: Seat, effect: string, supporter: boolean) {
   const opp = them(state, seat);
   const options = benchSlots(opp).filter((k) => !supporter || !supporterProof(state, opp.bench[keyIndex(k)]));
   if (!options.length) return;
@@ -342,25 +350,25 @@ function gustFrom(state: PState, seat: Seat, effect: string, supporter: boolean)
 }
 
 /** Coin flip, logged. */
-function coin(state: PState, seat: Seat, card: string) {
+export function coin(state: PState, seat: Seat, card: string) {
   const heads = flip();
   log(state, seat, `Coin flip for ${card}: ${heads ? "heads" : "tails"}.`, "coin");
   return heads;
 }
 
 /** Searches the deck, or does nothing when there's nothing to find. */
-const search = (state: PState, seat: Seat, card: string, title: string, match: Match, max: number, data: Data = {}) =>
+export const search = (state: PState, seat: Seat, card: string, title: string, match: Match, max: number, data: Data = {}) =>
   searchDeck(state, seat, { name: card } as PCard, title, match, max, {
     card,
     ...data,
   });
 
 /** Picks one of your Pokémon matching `test`, as a SlotKey list. */
-const myKeys = (state: PState, seat: Seat, test: (s: PSlot) => boolean = () => true) =>
+export const myKeys = (state: PState, seat: Seat, test: (s: PSlot) => boolean = () => true) =>
   slotsOf(me(state, seat))
     .filter((x) => test(x.slot))
     .map((x) => x.key);
-const myBenchKeys = (state: PState, seat: Seat, test: (s: PSlot) => boolean = () => true) => myKeys(state, seat, test).filter((k) => k !== "active");
+export const myBenchKeys = (state: PState, seat: Seat, test: (s: PSlot) => boolean = () => true) => myKeys(state, seat, test).filter((k) => k !== "active");
 
 const drewAnd =
   (n: number, then: (state: PState, seat: Seat, card: PCard) => void): TrainerEffect["play"] =>
@@ -490,7 +498,7 @@ const build = (): Record<string, TrainerEffect> => ({
   Blowtorch: {
     canPlay: (state, seat) => {
       if (!me(state, seat).hand.some(basicEnergyOf("Fire"))) return "You need a Basic Fire Energy card in your hand to discard.";
-      return state.stadium || attachedChoices(state, [otherSeat(seat)], (c, s) => s.tool?.uid === c.uid || isSpecialEnergy(c)).length
+      return state.stadium || attachedChoices(state, [otherSeat(seat)], (c, s) => toolsOn(s).includes(c) || isSpecialEnergy(c)).length
         ? null
         : "There's no Tool, Special Energy or Stadium to discard.";
     },
@@ -498,7 +506,7 @@ const build = (): Record<string, TrainerEffect> => ({
     resume(state, seat, picks, data) {
       if (data.step === "cost") {
         payDiscard(state, seat, picks);
-        const choices = attachedChoices(state, [otherSeat(seat)], (c, s) => s.tool?.uid === c.uid || isSpecialEnergy(c));
+        const choices = attachedChoices(state, [otherSeat(seat)], (c, s) => toolsOn(s).includes(c) || isSpecialEnergy(c));
         if (state.stadium)
           choices.push({
             id: "stadium",
@@ -550,9 +558,9 @@ const build = (): Record<string, TrainerEffect> => ({
   },
   "Team Rocket's Transceiver": searchToHand('Choose a Supporter with "Team Rocket" in its name', (c) => isSupporter(c) && c.name.includes("Team Rocket"), 1),
   "Tool Scrapper": {
-    canPlay: (state) => (attachedChoices(state, ["p1", "p2"], (c, s) => s.tool?.uid === c.uid).length ? null : "No Pokémon has a Tool attached."),
+    canPlay: (state) => (attachedChoices(state, ["p1", "p2"], (c, s) => toolsOn(s).includes(c)).length ? null : "No Pokémon has a Tool attached."),
     play(state, seat, card) {
-      const choices = attachedChoices(state, [otherSeat(seat), seat], (c, s) => s.tool?.uid === c.uid);
+      const choices = attachedChoices(state, [otherSeat(seat), seat], (c, s) => toolsOn(s).includes(c));
       askChoice(state, seat, "Choose up to 2 Pokémon Tools to discard", choices, card.name, { min: 1, max: 2 });
     },
     resume: (state, seat, picks) => picks.forEach((id) => discardChoice(state, seat, id)),
@@ -957,7 +965,7 @@ const build = (): Record<string, TrainerEffect> => ({
     play(state, seat) {
       const oppSeat = otherSeat(seat);
       for (const slot of inPlay(them(state, seat))) {
-        if (slot.tool) discardAttached(state, oppSeat, slot, slot.tool);
+        for (const t of toolsOn(slot)) discardAttached(state, oppSeat, slot, t);
         for (const e of slot.energy.filter(isSpecialEnergy)) discardAttached(state, oppSeat, slot, e);
       }
       discardStadium(state, seat);
@@ -1217,7 +1225,7 @@ const build = (): Record<string, TrainerEffect> => ({
   "Lost Vacuum": {
     canPlay: (state, seat) =>
       needsOtherCards(1)(state, seat) ??
-      (state.stadium || attachedChoices(state, ["p1", "p2"], (c, s) => s.tool?.uid === c.uid).length ? null : "There's no Tool or Stadium in play."),
+      (state.stadium || attachedChoices(state, ["p1", "p2"], (c, s) => toolsOn(s).includes(c)).length ? null : "There's no Tool or Stadium in play."),
     play(state, seat, card) {
       const p = me(state, seat);
       ask(state, {
@@ -1237,7 +1245,7 @@ const build = (): Record<string, TrainerEffect> => ({
         const gone = pull(p.hand, picks);
         (p.lost ??= []).push(...gone);
         log(state, seat, `${p.name} put ${names(gone)} in the Lost Zone.`);
-        const choices = attachedChoices(state, [otherSeat(seat), seat], (c, s) => s.tool?.uid === c.uid);
+        const choices = attachedChoices(state, [otherSeat(seat), seat], (c, s) => toolsOn(s).includes(c));
         if (state.stadium)
           choices.push({
             id: "stadium",
@@ -1254,7 +1262,7 @@ const build = (): Record<string, TrainerEffect> => ({
       }
       const found = fromAttachedId(state, picks[0]);
       if (!found) return;
-      found.slot.tool = null;
+      removeTool(found.slot, found.card.uid);
       (state.players[found.seat].lost ??= []).push(found.card);
       log(state, seat, `${found.card.name} went to the Lost Zone.`);
     },
@@ -2651,7 +2659,7 @@ const build = (): Record<string, TrainerEffect> => ({
       const p = me(state, seat);
       const [slot] = p.bench.splice(keyIndex(picks[0]), 1);
       if (!slot) return;
-      p.discard.push(...slot.pokemon, ...slot.energy, ...(slot.tool ? [slot.tool] : []));
+      p.discard.push(...slot.pokemon, ...attachedTo(slot));
       log(state, seat, `${p.name} discarded ${topCard(slot).name} and all cards attached to it.`);
     },
   },
@@ -2721,7 +2729,7 @@ const build = (): Record<string, TrainerEffect> => ({
       const p = me(state, seat);
       const key = picks[0] as SlotKey;
       const slot = slotAt(p, key)!;
-      p.hand.push(...slot.pokemon, ...slot.energy, ...(slot.tool ? [slot.tool] : []));
+      p.hand.push(...slot.pokemon, ...attachedTo(slot));
       if (key === "active") p.active = null;
       else p.bench.splice(keyIndex(key), 1);
       log(state, seat, `${p.name} put ${topCard(slot).name} and all attached cards into their hand.`);
@@ -2750,7 +2758,7 @@ const build = (): Record<string, TrainerEffect> => ({
     canPlay: (state, seat) =>
       me(state, seat).active && me(state, seat).bench.some((s) => s.energy.length) ? null : "Your Benched Pokémon have no Energy to move.",
     play(state, seat, card) {
-      const choices = attachedChoices(state, [seat], (c, s) => isEnergy(c) && s !== me(state, seat).active && s.tool?.uid !== c.uid);
+      const choices = attachedChoices(state, [seat], (c, s) => isEnergy(c) && s !== me(state, seat).active && !toolsOn(s).includes(c));
       askChoice(state, seat, "Choose up to 2 Energy on your Bench to move to your Active Pokémon", choices, card.name, { min: 1, max: 2 });
     },
     resume(state, seat, picks) {
@@ -2816,7 +2824,7 @@ function salvatoreEvolve(state: PState, seat: Seat, uid: string, key: SlotKey) {
   log(state, seat, `${p.name} evolved ${from} into ${card.name} with Salvatore.`);
 }
 
-const myOppKeys = (state: PState, seat: Seat, test: (s: PSlot) => boolean) =>
+export const myOppKeys = (state: PState, seat: Seat, test: (s: PSlot) => boolean) =>
   slotsOf(them(state, seat))
     .filter((x) => test(x.slot))
     .map((x) => x.key);

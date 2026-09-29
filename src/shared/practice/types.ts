@@ -38,6 +38,8 @@ export type PSlot = {
   pokemon: PCard[];
   energy: PCard[];
   tool: PCard | null;
+  /** More Tools, for Pokémon whose Abilities let them hold several (Tune-Up, Multi Adapter). Only set while `tool` is. */
+  extraTools?: PCard[];
   damage: number;
   conditions: Condition[];
   /** Turn number this Pokémon was put into play or last evolved (it can't evolve again that turn). */
@@ -83,6 +85,8 @@ export type PPlayer = {
   used: string[];
   /** A VSTAR Power has been used this game. */
   vstarUsed: boolean;
+  /** The first card of the Active Pokémon when the game last settled, to notice Pokémon moving (see trackMoves). */
+  activeId?: string | null;
 };
 
 /** Where a choice's options come from. */
