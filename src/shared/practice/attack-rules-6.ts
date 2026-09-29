@@ -2,6 +2,6 @@
 
 import type { AttackRule, Resume } from "./attack-rules";
 
-export const rulesDamage = (): AttackRule[] => [];
+export const rules6 = (): AttackRule[] => [];
 
-export const resumesDamage = (): Record<string, Resume> => ({});
+export const resumes6 = (): Record<string, Resume> => ({});

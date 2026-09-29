@@ -3,14 +3,16 @@
 // automated. Rules run before the patterns in attacks.ts, so a rule can claim a whole compound
 // sentence ("Flip 2 coins. If both are heads, ...") before a shorter pattern takes part of it.
 //
-// The rules themselves live in attack-rules-*.ts, grouped loosely by what they do.
+// The rules themselves live in attack-rules-1.ts to attack-rules-6.ts.
 
 import type { Seat } from "../game-types";
 import type { Attack, PPlayer, PSlot, PState } from "./types";
-import { rulesDamage, resumesDamage } from "./attack-rules-damage";
-import { rulesEffects, resumesEffects } from "./attack-rules-effects";
-import { rulesCards, resumesCards } from "./attack-rules-cards";
-import { rulesMisc, resumesMisc } from "./attack-rules-misc";
+import { rules1, resumes1 } from "./attack-rules-1";
+import { rules2, resumes2 } from "./attack-rules-2";
+import { rules3, resumes3 } from "./attack-rules-3";
+import { rules4, resumes4 } from "./attack-rules-4";
+import { rules5, resumes5 } from "./attack-rules-5";
+import { rules6, resumes6 } from "./attack-rules-6";
 
 /** What a rule can see and change while an attack is being worked out. */
 export type AttackCtx = {
@@ -66,11 +68,11 @@ export type AttackRule = {
 let rules: AttackRule[] | null = null;
 let resumes: Record<string, Resume> | null = null;
 export function attackRules(): AttackRule[] {
-  return (rules ??= [...rulesDamage(), ...rulesEffects(), ...rulesCards(), ...rulesMisc()]);
+  return (rules ??= [...rules1(), ...rules2(), ...rules3(), ...rules4(), ...rules5(), ...rules6()]);
 }
 /** The resume for a choice an attack rule asked for (prompt effects start with "atk:"). */
 export function attackRuleResume(effect: string): Resume | undefined {
-  resumes ??= { ...resumesDamage(), ...resumesEffects(), ...resumesCards(), ...resumesMisc() };
+  resumes ??= { ...resumes1(), ...resumes2(), ...resumes3(), ...resumes4(), ...resumes5(), ...resumes6() };
   return resumes[effect];
 }
 
