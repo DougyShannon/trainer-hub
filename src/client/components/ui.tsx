@@ -22,9 +22,13 @@ const ENERGY_LETTER: Record<string, string> = {
 
 /** A TCG Energy symbol, drawn as a coloured coin with the standard letter. */
 export function Energy({ type }: { type: string }) {
+  // "Any" is Energy that counts as every type; "Psychic|Darkness" can be either of those.
+  const either = type.split("|");
+  const wild = type === "Any" || either.length > 1;
+  const name = type === "Any" ? "Any type of" : either.join(" or ");
   return (
-    <span className={`energy e-${type.toLowerCase()}`} title={`${type} Energy`} aria-label={`${type} Energy`}>
-      {ENERGY_LETTER[type] ?? "?"}
+    <span className={`energy ${wild ? "e-any" : `e-${type.toLowerCase()}`}`} title={`${name} Energy`} aria-label={`${name} Energy`}>
+      {type === "Any" ? "★" : either.map((t) => ENERGY_LETTER[t] ?? "?").join("")}
     </span>
   );
 }

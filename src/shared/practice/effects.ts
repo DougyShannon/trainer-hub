@@ -6,6 +6,8 @@
 import { otherSeat, type Seat } from "../game-types";
 import { ask, draw, energyProvides, isBasicEnergy, isBasicPokemon, isPokemon, log, plural, shuffle, topCard } from "./engine";
 import type { PCard, PPlayer, PSlot, PState, TurnEffect } from "./types";
+import { markTotal, marksOn, matchesFilter } from "./lasting";
+import { unitIs, specialAfterDamage, specialCleanup, specialDamageTaken, specialEndOfTurn, specialFromHand, specialOnKnockOut } from "./special-energy";
 import {
   abilityAttackBlock,
   abilityAttackCost,
@@ -144,6 +146,8 @@ let playing: PState | null = null;
 export const setPlaying = (state: PState | null) => {
   playing = state;
 };
+/** The game being played right now (for coin flips, which don't get the state passed in). */
+export const flipping = () => playing;
 /** Whether healing works right now. */
 export const canHeal = () => !playing || !noHealing(playing);
 
@@ -225,6 +229,7 @@ export function damageBonus(state: PState, seat: Seat, attacker: PSlot, defender
   for (const e of effectsNow(state, "damageUp")) {
     if (e.seat === seat && (!e.type || ofType(a, e.type)) && matchesVs(d, e.vs)) bonus += e.amount ?? 0;
   }
+  bonus += markTotal(state, attacker, "dmgUp") - markTotal(state, attacker, "dmgDown");
   return bonus + abilityDamageBonus(state, seat, attacker, defender);
 }
 
@@ -260,6 +265,7 @@ export function damageTaken(state: PState, seat: Seat, attacker: PSlot, defender
   const theirs = state.players[seat];
   // Prevented completely.
   if (defender.effects.exProof === state.turn && isEx(a)) return 0;
+  if (marksOn(state, defender, "prevent").some((m) => matchesFilter(state, attacker, m.data) && (m.amount === undefined || damage <= m.amount))) return 0;
   if (stadiumOn(state, "Neutralization Zone", defender) && !hasRuleBox(d) && (isEx(a) || isV(a))) return 0;
   const tool = (name: string) => hasTool(state, defender, name);
   if (tool("Panic Mask") && hpLeft(state, attacker) <= 40) return 0;
@@ -273,12 +279,15 @@ export function damageTaken(state: PState, seat: Seat, attacker: PSlot, defender
   for (const t of toolNames(state, defender)) if (BERRIES[t] && ofType(a, BERRIES[t])) less += 60;
   if (stadiumOn(state, "Granite Cave", defender) && trainersPokemon(d, "Steven")) less += 30;
   if (stadiumOn(state, "Full Metal Lab", defender) && ofType(d, "Metal")) less += 30;
-  if (stadiumOn(state, "Lake Acuity", defender) && defender.energy.some((e) => energyProvides(e, state).some((t) => t === "Water" || t === "Fighting")))
+  if (stadiumOn(state, "Lake Acuity", defender) && defender.energy.some((e) => energyProvides(e, state).some((t) => unitIs(t, "Water") || unitIs(t, "Fighting"))))
     less += 20;
   for (const e of effectsNow(state, "damageDown")) {
     if (e.seat === owner && (!e.type || ofType(d, e.type)) && matchesVs(a, e.vs)) less += e.amount ?? 0;
   }
-  return abilityDamageTaken(state, seat, attacker, defender, Math.max(0, damage - less));
+  for (const m of marksOn(state, defender, "takesLess")) if (matchesFilter(state, attacker, m.data)) less += m.amount ?? 0;
+  less += specialDamageTaken(state, attacker, defender);
+  const taken = abilityDamageTaken(state, seat, attacker, defender, Math.max(0, damage - less));
+  return taken > 0 ? taken + markTotal(state, defender, "takesMore") : taken;
 }
 
 /**
@@ -310,6 +319,17 @@ export function hitWithAttack(state: PState, seat: Seat, attacker: PSlot, defend
   }
   if (damage <= 0) return;
   defender.damage += damage;
+  const endure = marksOn(state, defender, "endure")[0];
+  if (endure && fullHp && defender.damage >= maxHp(state, defender)) {
+    defender.damage = maxHp(state, defender) - (endure.amount ?? 10);
+    log(state, oppSeat, `${endure.source ?? "An attack's effect"} kept ${d.name} in play.`);
+  }
+  for (const m of marksOn(state, defender, "counter")) {
+    const n = m.amount ?? damage / 10;
+    attacker.damage += n * 10;
+    log(state, oppSeat, `${m.source ?? d.name} put ${plural(n, "damage counter")} on ${a.name}.`);
+  }
+  specialAfterDamage(state, seat, attacker, defender);
   survives(state, seat, defender, fullHp);
   afterAttackDamage(state, seat, attacker, defender, wasActive, fullHp);
   if (tool("Survival Brace") && fullHp && defender.damage >= maxHp(state, defender)) {
@@ -445,6 +465,7 @@ export function attackCost(state: PState, slot: PSlot, attack: { name?: string; 
   if (stadiumOn(state, "Nighttime Mine", slot) && isTera(c)) cost.push("Colorless");
   if (stadiumOn(state, "Pokémon League Headquarters", slot) && isBasicPokemon(c)) cost.push("Colorless");
   if (slot.effects.attackTax === state.turn) cost.push("Colorless");
+  for (let i = 0; i < markTotal(state, slot, "costMore"); i++) cost.push("Colorless");
   abilityAttackCost(state, slot, attack, cost);
   return cost;
 }
@@ -475,6 +496,7 @@ export function setCondition(state: PState, slot: PSlot, condition: PSlot["condi
 
 /** Clears Special Conditions from Pokémon that can't have them (checked whenever the game settles). */
 export function cleanse(state: PState) {
+  specialCleanup(state);
   for (const p of [state.players.p1, state.players.p2]) {
     for (const slot of inPlay(p)) {
       // A Pokémon that lost the Ability letting it hold several Tools keeps only one.
@@ -565,8 +587,21 @@ export function onBenched(state: PState, seat: Seat, slot: PSlot, fromHand: bool
 }
 
 /** Calamitous Snowy Mountain hurts Basic non-Water Pokémon when Energy is attached from the hand. */
-export function onEnergyFromHand(state: PState, seat: Seat, slot: PSlot) {
+export function onEnergyFromHand(state: PState, seat: Seat, slot: PSlot, card?: PCard) {
   const c = topCard(slot);
+  for (const m of marksOn(state, slot, "onEnergy")) {
+    if (m.data === "counters") {
+      slot.damage += (m.amount ?? 0) * 10;
+      log(state, seat, `${m.source ?? "An attack's effect"} put ${plural(m.amount ?? 0, "damage counter")} on ${c.name}.`);
+    } else if (m.data === "sleep") {
+      setCondition(state, slot, "asleep");
+      log(state, seat, `${m.source ?? "An attack's effect"}: ${c.name} is now Asleep.`);
+    } else if (m.data === "endTurn") {
+      log(state, seat, `${m.source ?? "An attack's effect"} ends ${state.players[seat].name}'s turn.`);
+      state.pendingEnd = true;
+    }
+  }
+  if (card) specialFromHand(state, seat, slot, card);
   if (stadiumOn(state, "Calamitous Snowy Mountain", slot) && isBasicPokemon(c) && !ofType(c, "Water")) {
     slot.damage += 20;
     log(state, seat, `Calamitous Snowy Mountain put 2 damage counters on ${c.name}.`);
@@ -653,6 +688,8 @@ export function beforeKnockOut(state: PState, seat: Seat, slot: PSlot, basePrize
       }
     }
   }
+  for (const m of marksOn(state, slot, "prizes")) prizes = m.amount === -99 ? 0 : Math.max(0, prizes + (m.amount ?? 0));
+  prizes = specialOnKnockOut(state, seat, slot, prizes, byAttack);
   return abilityKnockOut(state, seat, slot, prizes, byAttack);
 }
 
@@ -677,6 +714,7 @@ export function endOfTurn(state: PState) {
   const seat = state.current;
   const p = state.players[seat];
   endOfTurnAbilities(state);
+  specialEndOfTurn(state, seat);
   const active = p.active;
   if (active) {
     const tool = (name: string) => hasTool(state, active, name);

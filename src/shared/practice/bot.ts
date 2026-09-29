@@ -29,6 +29,7 @@ import {
 import { countFor, finalDamage } from "./attacks";
 import { trainerFor } from "./trainers";
 import { baseName, benchLimit, isAutomatedTool, toolRoom } from "./effects";
+import { unitIs } from "./special-energy";
 import { cardActions } from "./actions";
 import { abilityWorth } from "./abilities";
 import type { Attack, PAction, PCard, PPlayer, PSlot, PState, SlotKey } from "./types";
@@ -59,7 +60,8 @@ export function missing(cost: string[], energy: PCard[]) {
   const pool = energy.flatMap((e) => energyProvides(e));
   let miss = 0;
   for (const need of cost.filter((c) => c !== "Colorless" && c !== "Free")) {
-    const i = pool.indexOf(need);
+    let i = pool.indexOf(need);
+    if (i < 0) i = pool.findIndex((u) => unitIs(u, need));
     if (i < 0) miss++;
     else pool.splice(i, 1);
   }

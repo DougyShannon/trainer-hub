@@ -42,6 +42,8 @@ import {
 } from "./effects";
 import { discardedByOpponent, effectsProof, typesOf, weaknessesOf } from "./abilities";
 import type { Attack, PCard, PSlot, PState } from "./types";
+import { attackRules, type AttackCtx } from "./attack-rules";
+import { unitIs } from "./special-energy";
 
 const COUNT_WORDS: Record<string, number> = {
   a: 1,
@@ -72,7 +74,7 @@ export function countFor(state: PState, seat: Seat, what: string): number | null
   const energyType = ENERGY_TYPES.find((t) => w.includes(t.toLowerCase()));
   if (w.includes("energy attached to this pokémon")) {
     const units = attacker.energy.flatMap((e) => energyProvides(e));
-    return energyType ? units.filter((u) => u === energyType).length : units.length;
+    return energyType ? units.filter((u) => unitIs(u, energyType)).length : units.length;
   }
   if (w.includes("energy attached to your opponent's active") || w.includes("energy attached to the defending")) {
     return opp.active ? opp.active.energy.flatMap((e) => energyProvides(e)).length : 0;
@@ -81,7 +83,7 @@ export function countFor(state: PState, seat: Seat, what: string): number | null
     return [p.active, ...p.bench]
       .flatMap((s) => s?.energy ?? [])
       .flatMap((e) => energyProvides(e))
-      .filter((u) => !energyType || u === energyType).length;
+      .filter((u) => !energyType || unitIs(u, energyType)).length;
   }
   if (w.includes("damage counter on this pokémon")) return attacker.damage / 10;
   if (w.includes("damage counter on your opponent's active") || w.includes("damage counter on the defending")) {
@@ -159,7 +161,7 @@ export function benchDamage(state: PState, seat: Seat, slot: PSlot, amount: numb
 
 /** Takes the named Energy off a Pokémon and puts it in its owner's discard pile. */
 function discardEnergy(state: PState, owner: Seat, slot: PSlot, n: number, type: string | null) {
-  const matching = slot.energy.filter((e) => !type || energyProvides(e).includes(type));
+  const matching = slot.energy.filter((e) => !type || energyProvides(e).some((u) => unitIs(u, type)));
   // Special Energy goes first when it's the opponent's (it's usually worth more to them).
   const gone = matching.slice(-n);
   for (const e of gone) slot.energy.splice(slot.energy.indexOf(e), 1);
@@ -222,6 +224,46 @@ export function resolveAttack(state: PState, seat: Seat, attack: Attack) {
   let nothing = false;
   let m: RegExpMatchArray | null;
 
+  // ----- Rules for particular wording (attack-rules-*.ts) -----
+  const ctx: AttackCtx = {
+    state,
+    seat,
+    oppSeat,
+    p,
+    opp,
+    attacker,
+    defender,
+    attack,
+    text,
+    base,
+    nothing: false,
+    noWeakness: false,
+    skipDamage: false,
+    coin,
+    coins,
+    untilTails: () => {
+      let heads = 0;
+      while (flip()) heads++;
+      lastFlip = false;
+      log(state, seat, `Flipped until tails: ${plural(heads, "heads")}.`, "coin");
+      return heads;
+    },
+    lastFlip: () => lastFlip,
+    damageDone: 0,
+    shielded: false,
+    memo: {},
+  };
+  const posts: (() => void)[] = [];
+  for (const rule of attackRules()) {
+    const found = rest.match(rule.re);
+    if (!found) continue;
+    rest = rest.replace(found[0], " ");
+    rule.pre?.(ctx, found);
+    if (rule.post) posts.push(() => rule.post!(ctx, found));
+  }
+  base = ctx.base;
+  nothing = ctx.nothing;
+
   // ----- Damage -----
   if ((m = find(/Flip (\w+) coins?\. This attack does (\d+) damage (?:for|times the number of) (?:each )?heads\./i))) {
     base = Number(m[2]) * coins(toCount(m[1]));
@@ -279,7 +321,7 @@ export function resolveAttack(state: PState, seat: Seat, attack: Attack) {
   }
 
   // ----- Damage to the opponent's Active Pokémon -----
-  let damage = finalDamage(state, seat, attacker, defender, base, text);
+  let damage = ctx.skipDamage ? 0 : finalDamage(state, seat, attacker, defender, base, ctx.noWeakness ? `${text} This attack's damage isn't affected by Weakness or Resistance.` : text);
   const protect = defender.effects.protect?.turn === state.turn ? defender.effects.protect : null;
   const guard = defender.effects.guard?.turn === state.turn ? defender.effects.guard.amount : 0;
   if (protect && damage > 0) {
@@ -291,11 +333,14 @@ export function resolveAttack(state: PState, seat: Seat, attack: Attack) {
   if (damage > 0) {
     log(state, seat, `${attack.name} did ${damage} damage to ${topCard(defender).name}.`, "attack");
     hitWithAttack(state, seat, attacker, defender, damage);
-  } else if (hasDamage && !protect) {
+  } else if (hasDamage && !protect && !ctx.skipDamage) {
     log(state, seat, `${attack.name} did no damage.`, "attack");
     if (base > 0) hitWithAttack(state, seat, attacker, defender, 0);
   }
   const shielded = !!protect?.effects || effectsProof(state, seat, attacker, defender);
+  ctx.damageDone = damage;
+  ctx.shielded = shielded;
+  for (const post of posts) post();
 
   // ----- Effects -----
   if (

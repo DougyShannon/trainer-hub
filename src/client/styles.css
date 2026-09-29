@@ -119,6 +119,7 @@ button[type="submit"], .primary-btn {
 .e-grass { background: #3f9b3a; } .e-fire { background: #d9452b; } .e-water { background: #2b86d1; }
 .e-lightning { background: #e8b600; color: #2a2100; } .e-psychic { background: #8b4bb6; } .e-fighting { background: #b0592a; }
 .e-darkness { background: #2e3440; } .e-metal { background: #8a94a3; } .e-fairy { background: #de5fa0; }
+.e-any { background: conic-gradient(#5aa05a, #e0603c, #3c8fd8, #e8c62c, #9a5cc6, #5aa05a); color: #fff; text-shadow: 0 0 2px #000; }
 .e-dragon { background: #b39024; } .e-colorless { background: #e3e3dc; color: #333; } .e-free { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); }
 
 .type-row { display: inline-flex; flex-wrap: wrap; gap: 5px; align-items: center; }
