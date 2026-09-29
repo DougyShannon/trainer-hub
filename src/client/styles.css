@@ -968,3 +968,64 @@ textarea { resize: vertical; font: inherit; }
 .guide-mark.m-ready { background: var(--ok-soft); color: var(--ok); }
 .guide-show { justify-self: start; padding: 0; font-size: 13px; }
 @media (max-width: 640px) { .wrr.compact { grid-template-columns: repeat(3, 1fr); } }
+
+/* ----- Game tables: bigger mat, Stadium on the left, half-height hand, Energy, drag and drop ----- */
+/* Cards grow to fit the screen: limited by height (four rows of Pokémon plus the hand) and width. */
+.table-wrap { --cw: clamp(76px, min(calc((100vh - 330px) / 6.3), calc((100vw - 540px) / 6)), 132px); }
+.board { grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; padding-bottom: 0; }
+.stadium-rail { display: grid; align-content: center; justify-items: center; padding-right: 12px; border-right: 1px dashed var(--line); }
+.play-area { display: grid; gap: 8px; min-width: 0; }
+.midline { padding: 0; border-bottom: 0; }
+/* The hand shows the top half of each card along the bottom of the screen; hover one to see it whole. */
+.my-hand {
+  grid-column: 1 / -1; position: sticky; bottom: 0; z-index: 20; min-height: 0;
+  height: calc(var(--cw) * 0.7 + 10px); overflow: auto hidden; align-items: flex-start;
+  margin: 0 -12px; padding: 10px 12px 0; gap: 8px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: blur(6px);
+  border-top: 1px solid var(--line); border-radius: 0 0 calc(16px * var(--round)) calc(16px * var(--round));
+  box-shadow: 0 -6px 18px rgb(0 0 0 / 8%);
+}
+.my-hand .hand-card { touch-action: pan-x; transition: transform 0.12s; }
+.my-hand .hand-card:hover { transform: translateY(-4px); }
+.my-hand .hand-card.lifted { opacity: 0.35; }
+.my-hand .hand-role { bottom: auto; top: calc(var(--cw) * 0.42); }
+
+/* Energy cards tucked under a Pokémon, with their symbols showing below it. */
+.slot .gcard { position: relative; z-index: 2; }
+.tuck { position: relative; z-index: 1; display: flex; justify-content: center; margin-top: -14px; max-width: calc(var(--cw) + 16px); }
+.tuck-card {
+  display: flex; align-items: flex-end; justify-content: center; gap: 1px; min-width: 24px; height: 36px; padding: 0 2px 3px;
+  margin-left: -5px; background: var(--surface); border: 1px solid var(--line); border-radius: 0 0 5px 5px; box-shadow: var(--shadow);
+}
+.tuck-card:first-child { margin-left: 0; }
+.tuck-card .energy { width: 18px; height: 18px; font-size: 10px; }
+.ready-tag {
+  position: absolute; top: -9px; left: 50%; transform: translateX(-50%); z-index: 3; white-space: nowrap;
+  background: var(--ok); color: #fff; font: 700 11px/1 var(--body); padding: 3px 8px; border-radius: 999px; box-shadow: var(--shadow);
+}
+:root[data-mode="dark"] .ready-tag { color: #0a0d0b; }
+
+/* Drag and drop */
+.slot.drop-ok .gcard { outline: 3px dashed var(--ok); outline-offset: 2px; }
+.slot.drop-over .gcard { outline: 3px solid var(--ok); outline-offset: 2px; transform: scale(1.05); }
+.board.drop-over { box-shadow: inset 0 0 0 3px var(--ok); }
+.board.dragging { user-select: none; }
+.drag-ghost {
+  position: fixed; z-index: 80; width: 96px; aspect-ratio: 245 / 342; pointer-events: none; border-radius: 6px; overflow: hidden;
+  transform: translate(-50%, -60%) rotate(4deg); box-shadow: 0 14px 30px rgb(0 0 0 / 35%); background: var(--surface); display: grid; place-items: center;
+}
+.drag-ghost img { width: 100%; height: 100%; object-fit: cover; }
+
+@media (max-width: 1000px) {
+  .table-wrap { --cw: clamp(64px, calc((100vw - 150px) / 6.2), 120px); }
+}
+@media (max-width: 640px) {
+  .table-wrap { --cw: calc((100vw - 32px - 24px - 32px) / 5); }
+  /* On phones the Stadium sits in a slim strip across the top of the mat. */
+  .board { grid-template-columns: minmax(0, 1fr); }
+  .stadium-rail { border-right: 0; padding: 0; justify-items: start; }
+  .stadium-rail .stadium { grid-auto-flow: column; align-items: center; gap: 8px; }
+  .stadium-rail .gcard.sm { width: calc(var(--cw) * 0.45); }
+  .my-hand { margin: 0 -8px; padding: 8px 8px 0; }
+  .table-wrap:has(.action-panel:not(.idle)) .my-hand { padding-bottom: 0; }
+}

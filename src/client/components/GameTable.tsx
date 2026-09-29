@@ -19,6 +19,10 @@ import { sprite } from "../lib/sprites";
 import type { Connection } from "../lib/game";
 import { CardSummary, CardText, useCardDetail } from "./CardFacts";
 import { CardZoom, zoomHandlers } from "./CardZoom";
+import { useCardDrag } from "./DragDrop";
+import { EnergyTuck, ReadyTag } from "./EnergyTuck";
+import { canPay } from "../../shared/practice/engine";
+import type { PCard } from "../../shared/practice/types";
 import { TurnGuide, type GuideRow } from "./TurnGuide";
 
 type Pile = "hand" | "discard" | "lostZone" | "deck" | "attached" | "stadium" | "evolution";
@@ -115,26 +119,32 @@ function Pile({
   );
 }
 
+type DropProps = { drop?: string; dropState?: "" | "ok" | "over" };
+
 function SlotCard({
   slot,
   onClick,
   selected,
   highlight,
   label,
+  drop,
+  dropState = "",
 }: {
   slot: SlotView | null;
   onClick?: () => void;
   selected?: boolean;
   highlight?: boolean;
   label: string;
-}) {
+} & DropProps) {
+  const dropCls = dropState ? ` drop-${dropState}` : "";
   if (!slot) {
     return (
       <button
         type="button"
-        className={`slot empty${highlight ? " target" : ""}`}
+        className={`slot empty${highlight ? " target" : ""}${dropCls}`}
         onClick={onClick}
-        disabled={!onClick}
+        disabled={!onClick && !drop}
+        data-drop={drop}
         aria-label={`${label}: empty`}
       >
         <span className="gcard md empty" />
@@ -148,16 +158,50 @@ function SlotCard({
       </div>
     );
   }
+  return <FilledSlot slot={slot} onClick={onClick} selected={selected} highlight={highlight} label={label} dropCls={dropCls} drop={drop} />;
+}
+
+/** Attack names this Pokémon has enough Energy attached for (the table doesn't enforce it). */
+function useReadyAttacks(slot: Slot) {
+  const detail = useCardDetail(topOf(slot).cardId);
+  const energy = slot.attached.filter((c) => c.supertype === "Energy") as unknown as PCard[];
+  if (!detail?.details.attacks || !energy.length) return [];
+  return detail.details.attacks.filter((a) => canPay(a.cost ?? [], energy)).map((a) => a.name);
+}
+
+function FilledSlot({
+  slot,
+  onClick,
+  selected,
+  highlight,
+  label,
+  dropCls,
+  drop,
+}: {
+  slot: Slot;
+  onClick?: () => void;
+  selected?: boolean;
+  highlight?: boolean;
+  label: string;
+  dropCls: string;
+  drop?: string;
+}) {
   const top = topOf(slot);
   const remaining = top.hp ? top.hp - slot.damage : null;
+  const ready = useReadyAttacks(slot);
+  const energy = slot.attached.filter((c) => c.supertype === "Energy");
+  const other = slot.attached.filter((c) => c.supertype !== "Energy");
   return (
     <button
       type="button"
-      className={`slot${selected ? " selected" : ""}${highlight ? " target" : ""}`}
+      className={`slot${selected ? " selected" : ""}${highlight ? " target" : ""}${energy.length ? " has-energy" : ""}${dropCls}`}
       onClick={onClick}
+      data-drop={drop}
       aria-label={`${label}: ${top.name}${slot.damage ? `, ${slot.damage} damage` : ""}`}
     >
       <GameCard card={top} />
+      <EnergyTuck energy={energy} />
+      <ReadyTag attacks={ready} />
       {slot.damage > 0 && <span className={`dmg${remaining !== null && remaining <= 0 ? " ko" : ""}`}>{slot.damage}</span>}
       {slot.pokemon.length > 1 && <span className="stack-count">×{slot.pokemon.length}</span>}
       {slot.conditions.length > 0 && (
@@ -169,11 +213,11 @@ function SlotCard({
           ))}
         </span>
       )}
-      {slot.attached.length > 0 && (
+      {other.length > 0 && (
         <span className="attached">
-          {slot.attached.map((a) => (
-            <span key={a.uid} className="att" title={a.name}>
-              {a.name.replace(/^Basic /, "").replace(/ Energy$/, "")}
+          {other.map((a) => (
+            <span key={a.uid} className="att tool" title={a.name}>
+              {a.name}
             </span>
           ))}
         </span>
@@ -255,6 +299,35 @@ export function GameTable({
   }, [error, clearError]);
 
   const move = (card: CardRef, to: Target) => act({ type: "move", uid: card.uid, to });
+
+  // Drag from your hand: Energy, Tools and Evolutions onto a Pokémon, Basic Pokémon onto an
+  // empty spot, and Trainers anywhere on the mat (Stadiums go into play, the rest are played).
+  const canDrag = !!view.you && view.status !== "finished" && (view.status === "setup" ? !mine.ready : myTurn);
+  const playsAnywhere = (c: CardRef) => c.supertype === "Trainer" && !c.subtypes.includes("Pokémon Tool");
+  const slotRef = (t: string): SlotRef | null =>
+    t === "active" ? { zone: "active" } : t.startsWith("bench:") ? { zone: "bench", index: Number(t.slice(6)) } : null;
+  const canDrop = (card: CardRef, dropped: string) => {
+    if (!canDrag) return false;
+    const setup = view.status === "setup";
+    if (playsAnywhere(card)) return !setup;
+    if (dropped === "active-empty") return isBasicPokemon(card) && !mine.active;
+    if (dropped === "bench-empty") return isBasicPokemon(card) && mine.bench.length < BENCH_SIZE;
+    if (setup || !slotRef(dropped)) return false;
+    return card.supertype === "Energy" || card.subtypes.includes("Pokémon Tool") || (isPokemon(card) && !isBasicPokemon(card));
+  };
+  const drag = useCardDrag<CardRef>({
+    canDrop,
+    onDrop: (card, dropped) => {
+      setSel(null);
+      setPicking(null);
+      if (playsAnywhere(card)) return move(card, card.subtypes.includes("Stadium") ? { zone: "stadium" } : { zone: "discard" });
+      if (dropped === "active-empty") return move(card, { zone: "active", mode: "place" });
+      if (dropped === "bench-empty") return move(card, { zone: "bench", index: null, mode: "place" });
+      const ref = slotRef(dropped)!;
+      const mode = isPokemon(card) ? "evolve" : "attach";
+      move(card, { zone: ref.zone, index: ref.zone === "bench" ? ref.index : null, mode } as Target);
+    },
+  });
 
   const clickSlot = (side: Seat, ref: SlotRef) => {
     if (picking && side === me) {
@@ -342,7 +415,23 @@ export function GameTable({
       )}
 
       <div className="table-layout">
-        <div className="board">
+        <div className={`board${drag.dragging ? " dragging" : ""}${drag.dropState("board") ? ` drop-${drag.dropState("board")}` : ""}`} data-drop={canDrag ? "board" : undefined}>
+          <div className="stadium-rail">
+            <div className="stadium">
+              {view.stadium ? (
+                <GameCard
+                  card={view.stadium.card}
+                  size="sm"
+                  selected={sel?.kind === "card" && sel.card.uid === view.stadium.card.uid}
+                  onClick={() => selectCard(view.stadium!.card, "stadium", view.stadium!.owner)}
+                />
+              ) : (
+                <span className="gcard sm empty" />
+              )}
+              <span className="pile-label">Stadium</span>
+            </div>
+          </div>
+          <div className="play-area">
           {theirs ? (
             <Side
               p={theirs}
@@ -358,21 +447,7 @@ export function GameTable({
             <div className="side waiting">Waiting for an opponent…</div>
           )}
 
-          <div className="midline">
-            <div className="stadium">
-              {view.stadium ? (
-                <GameCard
-                  card={view.stadium.card}
-                  size="sm"
-                  selected={sel?.kind === "card" && sel.card.uid === view.stadium.card.uid}
-                  onClick={() => selectCard(view.stadium!.card, "stadium", view.stadium!.owner)}
-                />
-              ) : (
-                <span className="gcard sm empty" />
-              )}
-              <span className="pile-label">Stadium</span>
-            </div>
-          </div>
+          <div className="midline" />
 
           <Side
             p={mine}
@@ -386,18 +461,17 @@ export function GameTable({
             }
             onDeck={playing ? () => setSel(sel?.kind === "deck" ? null : { kind: "deck" }) : undefined}
             onPrizes={playing && view.status === "playing" ? () => setSel(sel?.kind === "prizes" ? null : { kind: "prizes" }) : undefined}
+            dropState={canDrag ? drag.dropState : undefined}
           />
+          </div>
 
           <div className="my-hand" aria-label="Hand">
             {mine.hand ? (
               mine.hand.length ? (
                 mine.hand.map((c) => (
-                  <GameCard
-                    key={c.uid}
-                    card={c}
-                    selected={sel?.kind === "card" && sel.card.uid === c.uid}
-                    onClick={view.you ? () => selectCard(c, "hand", me) : undefined}
-                  />
+                  <div key={c.uid} className={`hand-card${drag.dragging?.uid === c.uid ? " lifted" : ""}`} {...(canDrag ? drag.source(c, c) : {})}>
+                    <GameCard card={c} selected={sel?.kind === "card" && sel.card.uid === c.uid} onClick={view.you ? () => selectCard(c, "hand", me) : undefined} />
+                  </div>
                 ))
               ) : (
                 <p className="muted small">No cards in hand.</p>
@@ -444,6 +518,7 @@ export function GameTable({
       )}
 
       <CardZoom />
+      {drag.ghost}
 
       {pile && (
         <PileModal
@@ -514,6 +589,7 @@ function Side({
   onPile,
   onDeck,
   onPrizes,
+  dropState,
 }: {
   p: PlayerView;
   seat: Seat;
@@ -525,7 +601,9 @@ function Side({
   onPile: (from: "discard" | "lostZone") => void;
   onDeck?: () => void;
   onPrizes?: () => void;
+  dropState?: (target: string) => "" | "ok" | "over";
 }) {
+  const dropFor = (target: string) => (dropState ? { drop: target, dropState: dropState(target) } : {});
   const isSel = (ref: SlotRef) => sel?.kind === "slot" && sel.side === seat && sameRef(sel.ref, ref);
   const canPlace = sel?.kind === "card" && sel.side === seat && isPokemon(sel.card) && !!onEmptySlot;
   const target = (ref: SlotRef) =>
@@ -560,6 +638,7 @@ function Side({
         selected={isSel({ zone: "active" })}
         highlight={(!!p.active && target({ zone: "active" })) || (!p.active && canPlace)}
         onClick={p.active ? () => onSlot({ zone: "active" }) : canPlace ? () => onEmptySlot?.({ zone: "active" }) : undefined}
+        {...dropFor(p.active ? "active" : "active-empty")}
       />
       {zones}
     </div>
@@ -575,6 +654,7 @@ function Side({
           selected={isSel({ zone: "bench", index: i })}
           highlight={(!!s && target({ zone: "bench", index: i })) || (!s && i === firstEmpty && canPlace)}
           onClick={s ? () => onSlot({ zone: "bench", index: i }) : canPlace && i === firstEmpty ? () => onEmptySlot?.({ zone: "bench", index: i }) : undefined}
+          {...dropFor(s ? `bench:${i}` : "bench-empty")}
         />
       ))}
     </div>

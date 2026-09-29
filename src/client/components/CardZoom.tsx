@@ -17,18 +17,24 @@ const subscribe = (l: () => void) => {
   return () => listeners.delete(l);
 };
 
+// No zooming while a card is being dragged; it would cover where you're dropping it.
+let blocked = false;
+export const blockZoom = (on: boolean) => {
+  blocked = on;
+  if (on) set(null);
+};
+
 /** Pointer handlers to spread onto anything showing a face-up card. */
 export function zoomHandlers(card: CardRef | null) {
   if (!card?.image) return {};
   return {
     onPointerEnter: (e: PointerEvent<HTMLElement>) => {
-      if (e.pointerType === "mouse") set({ card, rect: e.currentTarget.getBoundingClientRect() });
+      if (e.pointerType === "mouse" && !blocked) set({ card, rect: e.currentTarget.getBoundingClientRect() });
     },
     onPointerLeave: () => set(null),
   };
 }
 
-export const hideZoom = () => set(null);
 
 const WIDTH = 300;
 const HEIGHT = Math.round((WIDTH * 342) / 245);

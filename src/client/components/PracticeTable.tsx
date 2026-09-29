@@ -29,6 +29,8 @@ import { sprite } from "../lib/sprites";
 import { CardSummary, CardText, useCardDetail } from "./CardFacts";
 import { CardPreview, GameCard } from "./GameTable";
 import { CardZoom } from "./CardZoom";
+import { useCardDrag } from "./DragDrop";
+import { EnergyTuck, ReadyTag } from "./EnergyTuck";
 import { TurnGuide, type GuideRow } from "./TurnGuide";
 import { Energy } from "./ui";
 
@@ -55,7 +57,12 @@ const ref = (c: PCard): CardRef => ({
 });
 
 const where = (key: SlotKey) => (key === "active" ? "Active" : `Bench ${Number(key.split(":")[1]) + 1}`);
-const shortEnergy = (c: PCard) => c.name.replace(/^Basic /, "").replace(/ Energy$/, "");
+
+/** Attacks this Pokémon has enough Energy attached for right now. */
+const readyAttacks = (state: PState, slot: PSlot) =>
+  topCard(slot)
+    .attacks.filter((a) => canPay(attackCost(state, slot, a), slot.energy))
+    .map((a) => a.name);
 
 function PracticeSlot({
   slot,
@@ -63,16 +70,23 @@ function PracticeSlot({
   onClick,
   selected,
   highlight,
+  ready,
+  drop,
+  dropState = "",
 }: {
   slot: PSlot | null;
   label: string;
   onClick?: () => void;
   selected?: boolean;
   highlight?: boolean;
+  ready?: string[];
+  drop?: string;
+  dropState?: "" | "ok" | "over";
 }) {
+  const dropCls = dropState ? ` drop-${dropState}` : "";
   if (!slot) {
     return (
-      <div className="slot empty" aria-label={`${label}: empty`}>
+      <div className={`slot empty${dropCls}`} aria-label={`${label}: empty`} data-drop={drop}>
         <span className="gcard md empty" />
       </div>
     );
@@ -82,11 +96,14 @@ function PracticeSlot({
   return (
     <button
       type="button"
-      className={`slot${selected ? " selected" : ""}${highlight ? " target" : ""}`}
+      className={`slot${selected ? " selected" : ""}${highlight ? " target" : ""}${slot.energy.length ? " has-energy" : ""}${dropCls}`}
       onClick={onClick}
+      data-drop={drop}
       aria-label={`${label}: ${top.name}, ${Math.max(0, hp - slot.damage)} of ${hp} HP left`}
     >
       <GameCard card={ref(top)} />
+      <EnergyTuck energy={slot.energy} />
+      {ready && <ReadyTag attacks={ready} />}
       {slot.damage > 0 && <span className={`dmg${slot.damage >= hp ? " ko" : ""}`}>{slot.damage}</span>}
       {slot.pokemon.length > 1 && <span className="stack-count">×{slot.pokemon.length}</span>}
       {slot.conditions.length > 0 && (
@@ -98,18 +115,11 @@ function PracticeSlot({
           ))}
         </span>
       )}
-      {(slot.energy.length > 0 || slot.tool) && (
+      {slot.tool && (
         <span className="attached">
-          {slot.energy.map((e) => (
-            <span key={e.uid} className="att" title={e.name}>
-              {shortEnergy(e)}
-            </span>
-          ))}
-          {slot.tool && (
-            <span className="att tool" title={slot.tool.name}>
-              {slot.tool.name}
-            </span>
-          )}
+          <span className="att tool" title={slot.tool.name}>
+            {slot.tool.name}
+          </span>
         </span>
       )}
     </button>
@@ -117,6 +127,7 @@ function PracticeSlot({
 }
 
 function Side({
+  state,
   p,
   seat,
   flipped,
@@ -125,7 +136,9 @@ function Side({
   targets,
   onSlot,
   onDiscard,
+  dropState,
 }: {
+  state: PState;
   p: PPlayer;
   seat: Seat;
   flipped?: boolean;
@@ -134,6 +147,8 @@ function Side({
   targets?: SlotKey[];
   onSlot: (key: SlotKey) => void;
   onDiscard: () => void;
+  /** Only your own side takes dropped cards. */
+  dropState?: (target: string) => "" | "ok" | "over";
 }) {
   const isSel = (key: SlotKey) => sel?.kind === "slot" && sel.side === seat && sel.key === key;
   const zones = (
@@ -171,6 +186,9 @@ function Side({
         selected={isSel("active")}
         highlight={targets?.includes("active")}
         onClick={() => onSlot("active")}
+        ready={p.active && state.status === "playing" ? readyAttacks(state, p.active) : undefined}
+        drop={dropState && p.active ? "active" : undefined}
+        dropState={dropState?.("active")}
       />
       {zones}
     </div>
@@ -179,14 +197,19 @@ function Side({
     <div className="bench" aria-label={`${p.name}'s Bench`}>
       {Array.from({ length: BENCH_SIZE }, (_, i) => {
         const key = `bench:${i}` as SlotKey;
+        const slot = p.bench[i] ?? null;
+        const drop = !dropState ? undefined : slot ? key : "bench-empty";
         return (
           <PracticeSlot
             key={i}
-            slot={p.bench[i] ?? null}
+            slot={slot}
             label={`Bench ${i + 1}`}
             selected={isSel(key)}
             highlight={targets?.includes(key)}
             onClick={() => onSlot(key)}
+            ready={slot && state.status === "playing" ? readyAttacks(state, slot) : undefined}
+            drop={drop}
+            dropState={drop ? dropState?.(drop) : ""}
           />
         );
       })}
@@ -638,6 +661,35 @@ export function PracticeTable({
   const [setupPick, setSetupPick] = useState<{ active: string | null; bench: string[] }>({ active: null, bench: [] });
   const [pile, setPile] = useState<{ title: string; cards: PCard[] } | null>(null);
   const [confirmConcede, setConfirmConcede] = useState(false);
+
+  // Drag a card from your hand onto a Pokémon (Energy, Tools, Evolutions), an empty Bench spot
+  // (Basic Pokémon) or anywhere on the mat (Items, Supporters, Stadiums).
+  // Items, Supporters and Stadiums are played by dropping them anywhere on the mat.
+  const playsAnywhere = (card: PCard) => card.supertype === "Trainer" && !isTool(card);
+  const canDrop = (card: PCard, dropped: string) => {
+    if (!canAct) return false;
+    const target = playsAnywhere(card) ? "board" : dropped;
+    if (target === "bench-empty") return isBasicPokemon(card) && mine.bench.length < BENCH_SIZE;
+    if (target === "board") return card.supertype === "Trainer" && !isTool(card) && !cantPlayTrainerReason(state, me, card);
+    const slot = slotAt(mine, target as SlotKey);
+    if (!slot) return false;
+    if (isEnergy(card)) return !mine.energyAttached;
+    if (isTool(card)) return !slot.tool;
+    if (isPokemon(card) && !isBasicPokemon(card)) return evolveTargets(state, me, card).includes(target as SlotKey);
+    return false;
+  };
+  const drag = useCardDrag<PCard>({
+    canDrop,
+    onDrop: (card, dropped) => {
+      setSel(null);
+      const target = playsAnywhere(card) ? "board" : dropped;
+      if (target === "bench-empty") act({ type: "playBasic", uid: card.uid });
+      else if (target === "board") act({ type: "playTrainer", uid: card.uid });
+      else if (isEnergy(card)) act({ type: "attachEnergy", uid: card.uid, slot: target as SlotKey });
+      else if (isTool(card)) act({ type: "attachTool", uid: card.uid, slot: target as SlotKey });
+      else act({ type: "evolve", uid: card.uid, slot: target as SlotKey });
+    },
+  });
   const logList = useRef<HTMLOListElement>(null);
   const lastLog = state.log[state.log.length - 1]?.n;
 
@@ -741,8 +793,16 @@ export function PracticeTable({
       {finished}
 
       <div className="table-layout">
-        <div className="board">
+        <div className={`board${drag.dragging ? " dragging" : ""}${drag.dropState("board") ? ` drop-${drag.dropState("board")}` : ""}`} data-drop={canAct ? "board" : undefined}>
+          <div className="stadium-rail">
+            <div className="stadium">
+              {state.stadium ? <GameCard card={ref(state.stadium.card)} size="sm" /> : <span className="gcard sm empty" />}
+              <span className="pile-label">Stadium</span>
+            </div>
+          </div>
+          <div className="play-area">
           <Side
+            state={state}
             p={theirs}
             seat={oppSeat}
             flipped
@@ -751,26 +811,28 @@ export function PracticeTable({
             onSlot={(key) => slotAt(theirs, key) && setSel({ kind: "slot", side: oppSeat, key })}
             onDiscard={() => setPile({ title: `${theirs.name}'s discard pile`, cards: theirs.discard })}
           />
-          <div className="midline">
-            <div className="stadium">
-              {state.stadium ? <GameCard card={ref(state.stadium.card)} size="sm" /> : <span className="gcard sm empty" />}
-              <span className="pile-label">Stadium</span>
-            </div>
-          </div>
+          <div className="midline" />
           <Side
+            state={state}
             p={mine}
             seat={me}
             tag={tag(you.name, sprite(you.avatar), `${mine.hand.length} in hand`)}
             sel={sel}
             onSlot={(key) => slotAt(mine, key) && setSel({ kind: "slot", side: me, key })}
             onDiscard={() => setPile({ title: "Your discard pile", cards: mine.discard })}
+            dropState={canAct ? drag.dropState : undefined}
           />
+          </div>
           <div className="my-hand" aria-label="Your hand">
             {mine.hand.length ? (
               mine.hand.map((c) => {
                 const role = setupPick.active === c.uid ? "Active" : setupPick.bench.includes(c.uid) ? "Bench" : null;
                 return (
-                  <div key={c.uid} className={`hand-card${settingUp && !isBasicPokemon(c) ? " dim" : ""}`}>
+                  <div
+                    key={c.uid}
+                    className={`hand-card${settingUp && !isBasicPokemon(c) ? " dim" : ""}${drag.dragging?.uid === c.uid ? " lifted" : ""}`}
+                    {...(canAct ? drag.source(c, { name: c.name, image: c.image }) : {})}
+                  >
                     <GameCard
                       card={ref(c)}
                       selected={settingUp ? !!role : sel?.kind === "hand" && sel.uid === c.uid}
@@ -853,6 +915,7 @@ export function PracticeTable({
       )}
 
       <CardZoom />
+      {drag.ghost}
 
       {state.prompt?.seat === me && state.status !== "finished" && <ChoiceModal state={state} me={me} act={act} />}
 
