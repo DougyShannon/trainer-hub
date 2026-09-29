@@ -70,6 +70,9 @@ function AccountMenu() {
           <Link role="menuitem" to="/decks">
             My decks
           </Link>
+          <Link role="menuitem" to="/teams">
+            My teams
+          </Link>
           <Link role="menuitem" to="/me/settings">
             Settings
           </Link>
@@ -109,6 +112,7 @@ export function Layout() {
             <NavLink to="/cards">Cards</NavLink>
             <NavLink to="/pokedex">Pokédex</NavLink>
             <NavLink to="/decks">Decks</NavLink>
+            <NavLink to="/teams">Teams</NavLink>
             <NavLink to="/play">Play</NavLink>
             <NavLink to="/arcade">Arcade</NavLink>
           </nav>

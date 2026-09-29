@@ -203,3 +203,19 @@ export type RecentGame = {
   endReason: string | null;
   finishedAt: string;
 };
+
+export type TeamSummary = {
+  id: string;
+  name: string;
+  format: string;
+  preview: { species: string; sprite: number }[];
+  isPublic: boolean;
+  updatedAt: string;
+  createdAt: string;
+};
+
+export type TeamDetail = TeamSummary & {
+  isOwner: boolean;
+  owner: { trainerName: string; avatarDex: number };
+  sets: import("../../shared/team-sets").PokemonSet[];
+};

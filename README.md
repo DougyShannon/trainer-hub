@@ -17,6 +17,9 @@ A fan-made site for playing the Pokémon Trading Card Game online with other peo
 | My decks | `/decks` |
 | Deck builder | `/decks/new`, `/decks/:id/edit` |
 | Deck page | `/decks/:id` (shareable when the deck is public) |
+| My battle teams | `/teams` |
+| Team builder | `/teams/new`, `/teams/:id/edit` (six Pokémon with moves, items and EVs; Showdown rules and text format) |
+| Team page | `/teams/:id` (shareable when the team is public) |
 | Play lobby | `/play` (open a table, join one, or watch a game) |
 | Game table | `/play/:id` (the link you send to an opponent) |
 | Arcade | `/arcade`, with `/arcade/whos-that-pokemon` and `/arcade/type-quiz` |
@@ -66,6 +69,7 @@ Each trainer can ask 40 questions a day. Trainers named in `ADMIN_TRAINERS` in `
 - `src/worker/routes/games.ts` opens, lists and joins games. Each game runs in its own `GameRoom` Durable Object (`src/worker/game/room.ts`), which players and spectators connect to over a WebSocket.
 - `src/worker/game/engine.ts` is the game table: zones, turns, prizes, coin flips and what each player is allowed to see. Moves are made by the players, like on a real play mat; card text isn't enforced.
 - `src/worker/routes/assistant.ts` runs the assistant: it sends the question to Claude with a guide to the site and the trainer's saved notes, and runs the tools Claude asks for (`src/worker/assistant/tools.ts`): card search, deck checking and saving, profile changes, notes, opening pages and switching the theme. The chat panel is `src/client/components/Assistant.tsx`, which also handles the microphone and reading answers aloud.
+- The Team Builder's game data and rules come from `@pkmn/sim`, the browser build of Pokémon Showdown's simulator (MIT licence). `src/client/teams/engine.ts` wraps it and is only downloaded on the Teams pages (about 1 MB). `src/client/teams/form-sprites.json` maps Pokémon forms to PokeAPI sprite numbers. Teams are saved by `src/worker/routes/teams.ts`, one database row per team.
 - `src/shared/deck-rules.ts` holds the 60-card deck rules, used by both the deck builder and the server. `src/shared/game-types.ts` holds the game types shared by the server and the table.
 - `src/client/` is the website itself (React).
 - `migrations/` holds the database tables.

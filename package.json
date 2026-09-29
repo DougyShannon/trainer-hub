@@ -13,6 +13,7 @@
     "db:setup:remote": "wrangler d1 migrations apply trainer-hub --remote && node scripts/load-seed.mjs --remote"
   },
   "dependencies": {
+    "@pkmn/sim": "^0.10.11",
     "hono": "^4.13.9",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",

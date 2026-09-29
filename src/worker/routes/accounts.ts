@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { AppEnv } from "../types";
 import { endSession, hashPassword, requireUser, startSession, toUser, USER_COLUMNS, verifyPassword } from "../lib/auth";
 import { deckSummary } from "./decks";
+import { teamSummary } from "./teams";
 import { cardsById } from "../lib/json";
 
 export const accounts = new Hono<AppEnv>();
@@ -154,6 +155,7 @@ accounts.delete("/api/me", requireUser, async (c) => {
   }
   await c.env.DB.batch([
     c.env.DB.prepare(`DELETE FROM decks WHERE user_id = ?`).bind(user.id),
+    c.env.DB.prepare(`DELETE FROM teams WHERE user_id = ?`).bind(user.id),
     c.env.DB.prepare(`DELETE FROM sessions WHERE user_id = ?`).bind(user.id),
     c.env.DB.prepare(`DELETE FROM users WHERE id = ?`).bind(user.id),
   ]);
@@ -177,6 +179,12 @@ accounts.get("/api/trainers/:name", async (c) => {
     .all<Record<string, unknown>>();
 
   const covers = await cardsById(c.env.DB, results.map((r) => r.cover_card_id as string).filter(Boolean));
+
+  const teamRows = await c.env.DB.prepare(
+    `SELECT * FROM teams WHERE user_id = ? ${isMe ? "" : "AND is_public = 1"} ORDER BY updated_at DESC LIMIT 50`,
+  )
+    .bind(user.id)
+    .all<Record<string, unknown>>();
 
   const record = await c.env.DB.prepare(
     `SELECT COUNT(*) AS played, COALESCE(SUM(winner_user_id = ?), 0) AS wins
@@ -205,6 +213,7 @@ accounts.get("/api/trainers/:name", async (c) => {
     trainer: publicUser(user),
     isMe,
     decks: results.map((r) => ({ ...deckSummary(r), coverImage: covers.get(r.cover_card_id as string)?.image ?? null })),
+    teams: teamRows.results.map(teamSummary),
     record: { played, wins, losses: played - wins },
     badges: badges.results.map((r) => r.level),
     recentGames: recent.results.map((r) => ({
