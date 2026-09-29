@@ -34,6 +34,10 @@ import { useCardDrag } from "./DragDrop";
 import { EnergyTuck, ReadyTag } from "./EnergyTuck";
 import { TurnGuide, type GuideRow } from "./TurnGuide";
 import { Energy } from "./ui";
+import { BoardButton, HalfMat, MatPile, backdropProps } from "./Mat";
+import { MATS, matById, matFor, type Mat } from "../boards/library";
+import { useBoardPrefs } from "../boards/prefs";
+import { venueById } from "../../shared/venues";
 
 type Sel = { kind: "hand"; uid: string } | { kind: "slot"; side: Seat; key: SlotKey } | null;
 
@@ -134,6 +138,8 @@ function Side({
   p,
   seat,
   flipped,
+  mat,
+  stadium,
   tag,
   sel,
   targets,
@@ -145,6 +151,9 @@ function Side({
   p: PPlayer;
   seat: Seat;
   flipped?: boolean;
+  /** Draw this side on a half mat instead of the full board. */
+  mat?: Mat;
+  stadium?: ReactNode;
   tag: ReactNode;
   sel: Sel;
   targets?: SlotKey[];
@@ -180,25 +189,19 @@ function Side({
       </div>
     </div>
   );
-  const active = (
-    <div className="active-row">
-      {tag}
-      <PracticeSlot
-        slot={p.active}
-        label="Active Pokémon"
-        selected={isSel("active")}
-        highlight={targets?.includes("active")}
-        onClick={() => onSlot("active")}
-        ready={p.active && state.status === "playing" ? readyAttacks(state, p.active) : undefined}
-        drop={dropState && p.active ? "active" : undefined}
-        dropState={dropState?.("active")}
-      />
-      {zones}
-    </div>
+  const activeSlot = (
+    <PracticeSlot
+      slot={p.active}
+      label="Active Pokémon"
+      selected={isSel("active")}
+      highlight={targets?.includes("active")}
+      onClick={() => onSlot("active")}
+      ready={p.active && state.status === "playing" ? readyAttacks(state, p.active) : undefined}
+      drop={dropState && p.active ? "active" : undefined}
+      dropState={dropState?.("active")}
+    />
   );
-  const bench = (
-    <div className="bench" aria-label={`${p.name}'s Bench`}>
-      {Array.from({ length: BENCH_SIZE }, (_, i) => {
+  const benchSlots = Array.from({ length: BENCH_SIZE }, (_, i) => {
         const key = `bench:${i}` as SlotKey;
         const slot = p.bench[i] ?? null;
         const drop = !dropState ? undefined : slot ? key : "bench-empty";
@@ -215,7 +218,46 @@ function Side({
             dropState={drop ? dropState?.(drop) : ""}
           />
         );
-      })}
+      });
+
+  if (mat) {
+    const top = p.discard[p.discard.length - 1];
+    return (
+      <HalfMat
+        mat={mat}
+        flipped={flipped}
+        label={`${p.name}'s mat`}
+        parts={{
+          tag,
+          active: activeSlot,
+          bench: benchSlots,
+          deck: (
+            <MatPile label="Deck" count={p.deck.length}>
+              {p.deck.length ? <GameCard card={null} label={`Deck: ${p.deck.length} cards`} /> : <span className="gcard md empty" />}
+            </MatPile>
+          ),
+          discard: (
+            <MatPile label="Discard" count={p.discard.length}>
+              {top ? <GameCard card={ref(top)} onClick={onDiscard} label={`Discard pile: ${p.discard.length} cards`} /> : <span className="gcard md empty" />}
+            </MatPile>
+          ),
+          prizes: p.prizes.slice(0, 6).map((_, i) => <GameCard key={i} card={null} label={`Prize cards: ${p.prizes.length} left`} />),
+          stadium,
+        }}
+      />
+    );
+  }
+
+  const active = (
+    <div className="active-row">
+      {tag}
+      {activeSlot}
+      {zones}
+    </div>
+  );
+  const bench = (
+    <div className="bench" aria-label={`${p.name}'s Bench`}>
+      {benchSlots}
     </div>
   );
   return <div className={`side${flipped ? " flipped" : ""}`}>{flipped ? <>{bench}{active}</> : <>{active}{bench}</>}</div>;
@@ -662,7 +704,7 @@ function ChoiceModal({ state, me, act }: { state: PState; me: Seat; act: (a: PAc
   );
 }
 
-export type Opponent = { name: string; title: string; ace: number };
+export type Opponent = { name: string; title: string; ace: number; venue?: string };
 
 export function PracticeTable({
   state,
@@ -697,6 +739,12 @@ export function PracticeTable({
   // The turn guide option whose cards are raised in your hand.
   const [raise, setRaise] = useState<{ what: string; cards: string[] } | null>(null);
   const [byHand, setByHand] = useState<ByHandFor | "closed">("closed");
+  const prefs = useBoardPrefs();
+  const mats = prefs.layout === "mats";
+  const myMat = matById(prefs.mat) ?? MATS[0];
+  // The computer plays on a mat that suits its Gym's type.
+  const theirMat = matFor(venueById(opponent.venue)?.type, myMat.id);
+  const backdrop = backdropProps(prefs);
 
   // Playing a card the game can't resolve opens the By hand moves with the card's text.
   const play = (a: PAction) => {
@@ -795,6 +843,18 @@ export function PracticeTable({
   const selected = sel?.kind === "hand" ? mine.hand.find((c) => c.uid === sel.uid) : null;
   const selectedSlot = sel?.kind === "slot" ? slotAt(state.players[sel.side], sel.key) : null;
 
+  const stadiumCard = state.stadium && (
+    <GameCard
+      card={ref(state.stadium.card)}
+      label={`Stadium: ${state.stadium.card.name}`}
+      onClick={
+        canAct
+          ? () => setByHand({ card: state.stadium!.card, text: cardText(state.stadium!.card), why: "The game doesn't do Stadium effects for you. If this one lets you do something, do it with these moves." })
+          : undefined
+      }
+    />
+  );
+
   const tag = (name: string, img: string, detail: string) => (
     <div className="player-tag">
       <img src={img} alt="" width={48} height={48} />
@@ -826,6 +886,7 @@ export function PracticeTable({
             Concede
           </button>
         )}
+        <BoardButton />
       </div>
 
       {settingUp && (
@@ -855,7 +916,40 @@ export function PracticeTable({
       {finished}
 
       <div className="table-layout">
-        <div className={`board${drag.dragging ? " dragging" : ""}${drag.dropState("board") ? ` drop-${drag.dropState("board")}` : ""}`} data-drop={canAct ? "board" : undefined}>
+        <div
+          className={`board${mats ? " mats" : backdrop.className}${drag.dragging ? " dragging" : ""}${drag.dropState("board") ? ` drop-${drag.dropState("board")}` : ""}`}
+          style={mats ? undefined : backdrop.style}
+          data-drop={canAct ? "board" : undefined}
+        >
+          {mats ? (
+            <div className="play-area">
+              <Side
+                state={state}
+                p={theirs}
+                seat={oppSeat}
+                flipped
+                mat={theirMat}
+                stadium={state.stadium?.owner === oppSeat ? stadiumCard : null}
+                tag={tag(theirs.name, sprite(opponent.ace), `${opponent.title} · ${theirs.hand.length} in hand`)}
+                sel={sel}
+                onSlot={(key) => slotAt(theirs, key) && setSel({ kind: "slot", side: oppSeat, key })}
+                onDiscard={() => setPile({ title: `${theirs.name}'s discard pile`, cards: theirs.discard })}
+              />
+              <Side
+                state={state}
+                p={mine}
+                seat={me}
+                mat={myMat}
+                stadium={state.stadium?.owner !== oppSeat ? stadiumCard : null}
+                tag={tag(you.name, sprite(you.avatar), `${mine.hand.length} in hand`)}
+                sel={sel}
+                onSlot={(key) => slotAt(mine, key) && setSel({ kind: "slot", side: me, key })}
+                onDiscard={() => setPile({ title: "Your discard pile", cards: mine.discard })}
+                dropState={canAct ? drag.dropState : undefined}
+              />
+            </div>
+          ) : (
+          <>
           <div className="stadium-rail">
             <div className="stadium">
               {state.stadium ? (
@@ -898,6 +992,8 @@ export function PracticeTable({
             dropState={canAct ? drag.dropState : undefined}
           />
           </div>
+          </>
+          )}
           <div className={`my-hand${raise ? " raising" : ""}`} aria-label="Your hand">
             {mine.hand.length ? (
               mine.hand.map((c) => {

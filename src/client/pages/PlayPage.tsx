@@ -5,6 +5,7 @@ import { useAuth } from "../lib/auth";
 import { sprite } from "../lib/sprites";
 import { FORMAT_LABELS } from "../../shared/deck-rules";
 import { Loading } from "../components/ui";
+import { BoardChooser } from "../components/Mat";
 import { VenueSelect, VenueTag } from "../components/Venue";
 import { venueById } from "../../shared/venues";
 import { OPPONENTS } from "../../shared/practice/opponents";
@@ -112,6 +113,15 @@ export function PlayPage() {
         <Link to="/play/practice" className="primary-btn">
           Practice play
         </Link>
+      </section>
+
+      <section className="panel board-panel">
+        <h2>Your board</h2>
+        <p className="muted small">
+          Play on one full board, or on two half play mats like a real table. You can change it during a game with the
+          Board button at the top right.
+        </p>
+        <BoardChooser />
       </section>
 
       <div className="play-grid">

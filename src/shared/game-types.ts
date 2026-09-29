@@ -42,6 +42,8 @@ export type PlayerState = Omit<PlayerInit, "cards"> & {
   bench: Slot[];
   ready: boolean;
   mulligans: number;
+  /** The play mat this player picked for the "Two half mats" board (a mat id), if any. */
+  mat?: string;
 };
 
 export type GameStatus = "waiting" | "setup" | "playing" | "finished";
@@ -85,6 +87,7 @@ export type PlayerView = {
   ready: boolean;
   mulligans: number;
   online: boolean;
+  mat?: string;
 };
 
 export type GameView = {
@@ -131,7 +134,8 @@ export type GameAction =
   | { type: "endTurn" }
   | { type: "concede" }
   | { type: "claimWin" }
-  | { type: "chat"; text: string };
+  | { type: "chat"; text: string }
+  | { type: "mat"; id: string };
 
 // ----- Messages over the WebSocket -----
 

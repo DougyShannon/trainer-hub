@@ -193,6 +193,13 @@ export function applyAction(state: GameState, seat: Seat, action: GameAction): {
   const opp = otherSeat(seat);
   const who = p.trainerName;
 
+  // Choosing a play mat is only for looks, so it's allowed at any time and isn't logged.
+  if (action.type === "mat") {
+    const id = String(action.id ?? "");
+    if (!/^[a-z0-9-]{1,40}$/.test(id)) fail("That isn't a play mat.");
+    p.mat = id;
+    return {};
+  }
   if (state.status === "waiting") fail("Waiting for an opponent to join.");
   if (state.status === "finished" && action.type !== "chat") fail("This game is over.");
 
@@ -587,6 +594,7 @@ export function viewFor(state: GameState, viewer: Seat | null, online: Record<Se
       ready: p.ready,
       mulligans: p.mulligans,
       online: online[seat],
+      mat: p.mat,
     };
   }
   return {

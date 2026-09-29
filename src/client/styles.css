@@ -1222,3 +1222,83 @@ textarea { resize: vertical; font: inherit; }
   .team-grid { grid-template-columns: 1fr; }
   .team-sprites img, .team-sprites .team-sprite-empty { width: 40px !important; height: 40px !important; }
 }
+
+/* ----- Board choice: the full board with a background picture, or two half play mats ----- */
+:root { --backdrop-veil: rgb(255 255 255 / 35%); }
+:root[data-mode="dark"] { --backdrop-veil: rgb(0 0 0 / 40%); }
+.board.has-backdrop, .venue-frame .board.has-backdrop {
+  background: linear-gradient(var(--backdrop-veil), var(--backdrop-veil)), var(--board-bg) center / cover no-repeat;
+}
+
+.board.mats, .venue-frame .board.mats { grid-template-columns: minmax(0, 1fr); background: none; border: 0; box-shadow: none; padding: 0; }
+.board.mats .play-area { gap: 12px; justify-items: center; }
+.board.mats .my-hand { margin: 0; border-radius: calc(16px * var(--round)); }
+/* Each mat keeps its picture's shape and is small enough that your own mat and hand fit on screen together. */
+.mat { position: relative; width: min(100%, calc((100vh - 190px) * var(--aspect))); border-radius: 2.2% / 3.7%; }
+.mat-art { position: absolute; inset: 0; border-radius: inherit; background: center / 100% 100% no-repeat; box-shadow: 0 6px 22px rgb(0 0 0 / 30%); }
+.mat.flipped .mat-art { transform: rotate(180deg); }
+.mat-spot { position: absolute; width: 0; height: 0; z-index: 2; }
+.mat-spot.under { z-index: 1; }
+.mat-spot.active { z-index: 3; }
+/* The point is the centre of the card; anything tucked under it (Energy, Tools) hangs below. */
+.mat-spot > * { position: absolute; left: 0; top: calc(var(--cw) * -0.698); transform: translateX(-50%); width: max-content; }
+.mat-spot.tag { z-index: 4; }
+.mat-spot.tag > * { top: 0; transform: translate(-50%, -50%); width: max-content; }
+.mat .gcard.empty { background: transparent; border-color: transparent; }
+.mat .gcard.back { box-shadow: 0 2px 6px rgb(0 0 0 / 40%); }
+.mat .player-tag { background: rgb(10 12 20 / 70%); color: #fff; padding: 4px 12px 4px 4px; border-radius: 999px; max-width: max(150px, calc(var(--cw) * 2.6)); box-shadow: 0 2px 8px rgb(0 0 0 / 30%); }
+.mat .player-tag img { width: clamp(22px, calc(var(--cw) * 0.45), 48px); height: auto; }
+.mat .player-tag .muted { color: rgb(255 255 255 / 75%); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mat-pile { position: relative; display: grid; justify-items: center; }
+.mat-count {
+  position: absolute; left: 50%; bottom: 0; transform: translate(-50%, 50%); z-index: 3; white-space: nowrap;
+  background: rgb(10 12 20 / 78%); color: #fff; font-size: 11px; padding: 1px 8px; border-radius: 999px;
+}
+.mat-cover { position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; border-radius: inherit; background: rgb(0 0 0 / 40%); color: #fff; font-weight: 700; }
+
+.board-chooser { display: grid; gap: 10px; }
+.board-chooser h3 { margin: 6px 0 0; }
+.board-chooser p { margin: 0; }
+.layout-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.layout-choice {
+  display: flex; gap: 10px; align-items: center; padding: 10px; text-align: left; cursor: pointer;
+  background: var(--surface); color: var(--ink); font: inherit; border: 1px solid var(--line); border-radius: calc(10px * var(--round));
+}
+.layout-choice > span:last-child { display: grid; gap: 2px; }
+.layout-choice.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-soft); }
+.layout-mini { flex: none; display: grid; gap: 3px; width: 48px; height: 58px; }
+.layout-mini span { border-radius: 3px; background: color-mix(in srgb, var(--accent) 30%, var(--surface)); border: 1px solid var(--line); }
+.layout-mini.full span:last-child { display: none; }
+.layout-mini.mats { grid-template-rows: 1fr 1fr; }
+.layout-mini.mats span { background: #1b1d24; border-color: #555; }
+.mat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.mat-pick {
+  display: grid; gap: 4px; padding: 4px; cursor: pointer; text-align: center; font: inherit; font-size: 13px; color: var(--ink);
+  background: var(--surface-2); border: 2px solid transparent; border-radius: calc(10px * var(--round));
+}
+.mat-pick.on { border-color: var(--accent); }
+.mat-pick img, .mat-plain { display: block; width: 100%; aspect-ratio: 1.695; object-fit: cover; border-radius: calc(6px * var(--round)); }
+.mat-plain { background: linear-gradient(180deg, #2d6a4f33, #2748a833); border: 1px dashed var(--line); }
+.board-btn { order: 99; }
+.board-panel h2 { margin: 0 0 8px; }
+@media (max-width: 640px) {
+  .layout-choices { grid-template-columns: 1fr; }
+  .mat-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Add a board (lining up the card spots on a new mat) */
+.mat-maker .panel { margin-bottom: 16px; }
+.mat-maker .panel h2 { margin-top: 0; }
+.maker-row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 10px; }
+.maker-row input:not([type="range"]) { padding: 6px 8px; border: 1px solid var(--line); border-radius: calc(6px * var(--round)); background: var(--surface); color: var(--ink); font: inherit; }
+.maker-mat { position: relative; width: 100%; max-width: 1100px; touch-action: none; user-select: none; }
+.maker-mat img { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 2.2% / 3.7%; }
+.maker-spot {
+  position: absolute; transform: translate(-50%, -50%); display: grid; place-items: center; cursor: grab; text-align: center;
+  border: 2px solid #3ee6ff; background: rgb(62 230 255 / 18%); color: #fff; font: 700 11px/1.1 var(--body);
+  text-shadow: 0 1px 2px #000; border-radius: 4px;
+}
+.maker-spot.tag { border-style: dashed; border-radius: 999px; }
+.maker-spot.on { cursor: grabbing; border-color: var(--gold); background: rgb(240 184 60 / 30%); z-index: 2; }
+.maker-code { background: var(--surface-2); border-radius: calc(8px * var(--round)); padding: 10px; overflow-x: auto; font: 13px/1.5 var(--mono); white-space: pre; }
+.mat-maker .primary-btn { justify-self: start; }

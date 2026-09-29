@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1c6fa8"/><stop offset="1" stop-color="#3fb2d6"/></linearGradient>
+    <linearGradient id="sand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f3dca4"/><stop offset="1" stop-color="#e2c07c"/></linearGradient>
+  </defs>
+  <rect width="1600" height="1000" fill="url(#sea)"/>
+  <g fill="none" stroke="#fff" stroke-opacity="0.3" stroke-width="5">
+    <path d="M0 120 q100 -30 200 0 t200 0 t200 0 t200 0 t200 0 t200 0 t200 0 t200 0"/>
+    <path d="M0 260 q100 -30 200 0 t200 0 t200 0 t200 0 t200 0 t200 0 t200 0 t200 0"/>
+    <path d="M0 400 q100 -30 200 0 t200 0 t200 0 t200 0 t200 0 t200 0 t200 0 t200 0"/>
+  </g>
+  <path d="M0 560 q200 -50 400 0 t400 0 t400 0 t400 0 V1000 H0 Z" fill="#fff" opacity="0.5"/>
+  <path d="M0 590 q200 -50 400 0 t400 0 t400 0 t400 0 V1000 H0 Z" fill="url(#sand)"/>
+  <g fill="#c9a260" opacity="0.5"><circle cx="220" cy="760" r="6"/><circle cx="560" cy="880" r="5"/><circle cx="930" cy="720" r="6"/><circle cx="1290" cy="860" r="5"/><circle cx="1460" cy="700" r="4"/></g>
+</svg>
