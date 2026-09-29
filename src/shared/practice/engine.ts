@@ -343,8 +343,9 @@ export function evolveTargets(state: PState, seat: Seat, card: PCard): SlotKey[]
 /** Why the active Pokémon can't attack right now, or null if it can. */
 export function cantAttackReason(state: PState, seat: Seat): string | null {
   const p = state.players[seat];
-  if (state.turn === 1 && !attacksFirstTurn(state, seat)) return "The player who goes first can't attack on their first turn.";
   if (!p.active) return "You have no Active Pokémon.";
+  if (state.turn === 1 && !attacksFirstTurn(state, seat) && !attacksOf(state, p.active).some(usableFirstTurn))
+    return "The player who goes first can't attack on their first turn.";
   const windup = ignoresSleep(state, p.active);
   if (p.active.conditions.includes("asleep") && !windup) return "Your Active Pokémon is Asleep.";
   if (p.active.conditions.includes("paralyzed") && !windup) return "Your Active Pokémon is Paralyzed.";
@@ -378,7 +379,11 @@ export function attacksOf(state: PState, slot: PSlot): Attack[] {
 }
 
 /** Why an attack's own text stops it being used right now, or null. */
+/** "If you go first, you can use this attack during your first turn." */
+const usableFirstTurn = (attack: Attack) => /If you go first, you can use this attack during your first turn/i.test(attack.text ?? "");
+
 export function attackRuleBlock(state: PState, seat: Seat, attack: Attack): string | null {
+  if (state.turn === 1 && !attacksFirstTurn(state, seat) && !usableFirstTurn(attack)) return "The player who goes first can't attack on their first turn.";
   const active = state.players[seat].active;
   const named = marksOn(state, active, "noAttack").find((m) => m.data === attack.name);
   if (named) return `${named.source ?? "An attack"} stops ${attack.name} being used this turn.`;

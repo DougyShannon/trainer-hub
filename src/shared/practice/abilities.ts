@@ -136,7 +136,7 @@ export function abilityProof(state: PState, seat: Seat, slot: PSlot) {
 export function effectsProof(state: PState, seat: Seat, attacker: PSlot, slot: PSlot) {
   const owner = otherSeat(seat);
   const a = topCard(attacker);
-  if (specialEffectsProof(state, slot)) return true;
+  if (specialEffectsProof(state, slot) || marked(state, slot, "effectsProof")) return true;
   if (["Unfazed Fat", "Emperor's Stance", "Cocoon Cover", "Flare Veil", "Protective Cover", "Unaware", "Hide 'n' Sneak"].some((n) => has(state, slot, n)))
     return true;
   if (slot.energy.length && anywhere(state, owner, "Protective Mycelium")) return true;

@@ -40,7 +40,9 @@ export type MarkKind =
   /** If this Pokémon is Knocked Out, the other player takes `amount` more Prize cards (negative for fewer; -99 for none). */
   | "prizes"
   /** If this Pokémon has full HP and would be Knocked Out by damage from an attack, its remaining HP becomes `amount` instead. */
-  | "endure";
+  | "endure"
+  /** Prevent all effects (not damage) of attacks used by the opponent's Pokémon done to this Pokémon. */
+  | "effectsProof";
 
 export type Mark = { kind: MarkKind; turn: number; amount?: number; data?: string; source?: string };
 
