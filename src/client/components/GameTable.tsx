@@ -24,6 +24,9 @@ import { EnergyTuck, ReadyTag } from "./EnergyTuck";
 import { canPay } from "../../shared/practice/engine";
 import type { PCard } from "../../shared/practice/types";
 import { TurnGuide, type GuideRow } from "./TurnGuide";
+import { BoardButton, HalfMat, MatPile, backdropProps } from "./Mat";
+import { MATS, matById, matFor, type Mat } from "../boards/library";
+import { useBoardPrefs } from "../boards/prefs";
 
 type Pile = "hand" | "discard" | "lostZone" | "deck" | "attached" | "stadium" | "evolution";
 
@@ -271,6 +274,15 @@ export function GameTable({
   const [picking, setPicking] = useState<Picking | null>(null);
   const [pile, setPile] = useState<PileView | null>(null);
   const [confirmConcede, setConfirmConcede] = useState(false);
+  const prefs = useBoardPrefs();
+  const mats = prefs.layout === "mats";
+  const myMat = matById(prefs.mat) ?? MATS[0];
+  // Each player's mat choice travels with the game, so both see the same two mats.
+  const theirMat = matById(theirs?.mat) ?? matFor(null, myMat.id);
+  useEffect(() => {
+    if (view.you && connection === "open" && view.players[view.you]?.mat !== prefs.mat) act({ type: "mat", id: prefs.mat });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view.you, connection, prefs.mat, view.players[me]?.mat]);
   // The turn guide option whose cards are raised in your hand.
   const [raise, setRaise] = useState<{ what: string; cards: string[] } | null>(null);
   const handKey = mine.hand?.map((c) => c.uid).join() ?? "";
@@ -376,6 +388,16 @@ export function GameTable({
     setSel(sel?.kind === "card" && sel.card.uid === card.uid ? null : { kind: "card", card, from, side });
   };
 
+  const backdrop = backdropProps(prefs);
+  const stadiumCard = view.stadium && (
+    <GameCard
+      card={view.stadium.card}
+      label={`Stadium: ${view.stadium.card.name}`}
+      selected={sel?.kind === "card" && sel.card.uid === view.stadium.card.uid}
+      onClick={() => selectCard(view.stadium!.card, "stadium", view.stadium!.owner)}
+    />
+  );
+
   const turnLabel =
     view.status === "setup"
       ? "Setting up"
@@ -412,6 +434,7 @@ export function GameTable({
             Concede
           </button>
         )}
+        <BoardButton />
       </div>
 
       {view.status === "setup" && view.you && (
@@ -437,7 +460,48 @@ export function GameTable({
       )}
 
       <div className="table-layout">
-        <div className={`board${drag.dragging ? " dragging" : ""}${drag.dropState("board") ? ` drop-${drag.dropState("board")}` : ""}`} data-drop={canDrag ? "board" : undefined}>
+        <div
+          className={`board${mats ? " mats" : backdrop.className}${drag.dragging ? " dragging" : ""}${drag.dropState("board") ? ` drop-${drag.dropState("board")}` : ""}`}
+          style={mats ? undefined : backdrop.style}
+          data-drop={canDrag ? "board" : undefined}
+        >
+          {mats ? (
+            <div className="play-area">
+              {theirs ? (
+                <Side
+                  p={theirs}
+                  seat={opp}
+                  flipped
+                  mat={theirMat}
+                  stadium={view.stadium?.owner === opp ? stadiumCard : null}
+                  sel={sel}
+                  onSlot={(ref) => clickSlot(opp, ref)}
+                  onPile={(from) =>
+                    setPile({ title: `${theirs.trainerName}'s ${from === "discard" ? "discard pile" : "Lost Zone"}`, cards: theirs[from], side: opp, from })
+                  }
+                />
+              ) : (
+                <HalfMat mat={theirMat} flipped label="Opponent's mat" parts={{ tag: null, active: null, bench: [], deck: null, discard: null, prizes: [] }} cover="Waiting for an opponent…" />
+              )}
+              <Side
+                p={mine}
+                seat={me}
+                mat={myMat}
+                stadium={view.stadium?.owner !== opp ? stadiumCard : null}
+                sel={sel}
+                picking={picking}
+                onSlot={(ref) => clickSlot(me, ref)}
+                onEmptySlot={view.you ? clickEmptySlot : undefined}
+                onPile={(from) =>
+                  setPile({ title: `${view.you ? "Your" : `${mine.trainerName}'s`} ${from === "discard" ? "discard pile" : "Lost Zone"}`, cards: mine[from], side: me, from })
+                }
+                onDeck={playing ? () => setSel(sel?.kind === "deck" ? null : { kind: "deck" }) : undefined}
+                onPrizes={playing && view.status === "playing" ? () => setSel(sel?.kind === "prizes" ? null : { kind: "prizes" }) : undefined}
+                dropState={canDrag ? drag.dropState : undefined}
+              />
+            </div>
+          ) : (
+          <>
           <div className="stadium-rail">
             <div className="stadium">
               {view.stadium ? (
@@ -486,6 +550,8 @@ export function GameTable({
             dropState={canDrag ? drag.dropState : undefined}
           />
           </div>
+          </>
+          )}
 
           <div className={`my-hand${raise ? " raising" : ""}`} aria-label="Hand">
             {mine.hand ? (
@@ -606,6 +672,8 @@ function Side({
   p,
   seat,
   flipped,
+  mat,
+  stadium,
   sel,
   picking,
   onSlot,
@@ -618,6 +686,9 @@ function Side({
   p: PlayerView;
   seat: Seat;
   flipped?: boolean;
+  /** Draw this side on a half mat instead of the full board. */
+  mat?: Mat;
+  stadium?: ReactNode;
   sel: Selection | null;
   picking?: Picking | null;
   onSlot: (ref: SlotRef) => void;
@@ -645,32 +716,28 @@ function Side({
     </div>
   );
 
-  const active = (
-    <div className="active-row">
-      <div className="player-tag">
-        <img src={sprite(p.avatarDex)} alt="" width={48} height={48} />
-        <span>
-          <strong>{p.trainerName}</strong>
-          <span className="muted small">
-            {p.online ? "Online" : "Away"} · {p.handCount} in hand
-          </span>
+  const tag = (
+    <div className="player-tag">
+      <img src={sprite(p.avatarDex)} alt="" width={48} height={48} />
+      <span>
+        <strong>{p.trainerName}</strong>
+        <span className="muted small">
+          {p.online ? "Online" : "Away"} · {p.handCount} in hand
         </span>
-      </div>
-      <SlotCard
-        slot={p.active}
-        label="Active Pokémon"
-        selected={isSel({ zone: "active" })}
-        highlight={(!!p.active && target({ zone: "active" })) || (!p.active && canPlace)}
-        onClick={p.active ? () => onSlot({ zone: "active" }) : canPlace ? () => onEmptySlot?.({ zone: "active" }) : undefined}
-        {...dropFor(p.active ? "active" : "active-empty")}
-      />
-      {zones}
+      </span>
     </div>
   );
-
-  const bench = (
-    <div className="bench" aria-label={`${p.trainerName}'s Bench`}>
-      {benchSlots.map((s, i) => (
+  const activeSlot = (
+    <SlotCard
+      slot={p.active}
+      label="Active Pokémon"
+      selected={isSel({ zone: "active" })}
+      highlight={(!!p.active && target({ zone: "active" })) || (!p.active && canPlace)}
+      onClick={p.active ? () => onSlot({ zone: "active" }) : canPlace ? () => onEmptySlot?.({ zone: "active" }) : undefined}
+      {...dropFor(p.active ? "active" : "active-empty")}
+    />
+  );
+  const benchSlot = (s: SlotView | null, i: number) => (
         <SlotCard
           key={i}
           slot={s}
@@ -680,7 +747,56 @@ function Side({
           onClick={s ? () => onSlot({ zone: "bench", index: i }) : canPlace && i === firstEmpty ? () => onEmptySlot?.({ zone: "bench", index: i }) : undefined}
           {...dropFor(s ? `bench:${i}` : "bench-empty")}
         />
-      ))}
+  );
+
+  if (mat) {
+    const pileCard = (label: string, count: number, top: CardRef | null, onClick?: () => void, selected?: boolean) =>
+      count ? (
+        <GameCard card={top} onClick={onClick} selected={selected} label={`${label}: ${count} cards`} />
+      ) : (
+        <span className="gcard md empty" aria-label={`${label}: empty`} />
+      );
+    const prizes = Array.from({ length: Math.min(p.prizeCount, 6) }, (_, i) => (
+      <GameCard key={i} card={null} onClick={onPrizes} selected={sel?.kind === "prizes" && !flipped} label={`Prize cards: ${p.prizeCount} left`} />
+    ));
+    return (
+      <HalfMat
+        mat={mat}
+        flipped={flipped}
+        label={`${p.trainerName}'s mat`}
+        parts={{
+          tag,
+          active: activeSlot,
+          bench: benchSlots.map(benchSlot),
+          deck: <MatPile label="Deck" count={p.deckCount}>{pileCard("Deck", p.deckCount, null, onDeck, sel?.kind === "deck" && !flipped)}</MatPile>,
+          discard: (
+            <MatPile label="Discard" count={p.discard.length}>
+              {pileCard("Discard", p.discard.length, p.discard[p.discard.length - 1] ?? null, () => onPile("discard"))}
+            </MatPile>
+          ),
+          prizes,
+          stadium,
+          lostZone: p.lostZone.length > 0 && (
+            <MatPile label="Lost Zone" count={p.lostZone.length}>
+              {pileCard("Lost Zone", p.lostZone.length, p.lostZone[p.lostZone.length - 1], () => onPile("lostZone"))}
+            </MatPile>
+          ),
+        }}
+      />
+    );
+  }
+
+  const active = (
+    <div className="active-row">
+      {tag}
+      {activeSlot}
+      {zones}
+    </div>
+  );
+
+  const bench = (
+    <div className="bench" aria-label={`${p.trainerName}'s Bench`}>
+      {benchSlots.map(benchSlot)}
     </div>
   );
 
