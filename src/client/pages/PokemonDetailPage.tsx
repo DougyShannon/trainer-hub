@@ -4,6 +4,7 @@ import { useApi, type PokemonDetail } from "../lib/api";
 import { animatedSprite, artwork, cry, dexNumber, shinyArtwork, sprite } from "../lib/sprites";
 import { CardThumb, ErrorBox, GAME_TYPES, Loading, TypeBadge } from "../components/ui";
 import { AddToDeckButton, DeckTarget } from "../components/AddToDeck";
+import { AddToTeam } from "../components/AddToTeam";
 import typeChart from "../../shared/type-chart.json";
 import { NotFoundPage } from "./NotFoundPage";
 
@@ -122,6 +123,7 @@ export function PokemonDetailPage() {
             <img src={sprite(p.id)} alt={`${p.name} pixel sprite`} width={96} height={96} />
             <img src={animatedSprite(p.id)} alt={`${p.name} animated sprite`} width={96} height={96} />
           </div>
+          <AddToTeam name={p.name} num={p.id} />
         </div>
       </section>
 

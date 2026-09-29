@@ -23,6 +23,9 @@ import { TrainerPage } from "./pages/TrainerPage";
 import { DecksPage } from "./pages/DecksPage";
 import { DeckBuilderPage } from "./pages/DeckBuilderPage";
 import { DeckViewPage } from "./pages/DeckViewPage";
+import { TeamsPage } from "./pages/TeamsPage";
+import { TeamBuilderPage } from "./pages/TeamBuilderPage";
+import { TeamViewPage } from "./pages/TeamViewPage";
 import { AuthProvider } from "./lib/auth";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./styles.css";
@@ -47,6 +50,10 @@ createRoot(document.getElementById("root")!).render(
           <Route path="decks/new" element={<DeckBuilderPage />} />
           <Route path="decks/:id" element={<DeckViewPage />} />
           <Route path="decks/:id/edit" element={<DeckBuilderPage />} />
+          <Route path="teams" element={<TeamsPage />} />
+          <Route path="teams/new" element={<TeamBuilderPage key="new" />} />
+          <Route path="teams/:id" element={<TeamViewPage />} />
+          <Route path="teams/:id/edit" element={<TeamBuilderPage />} />
           <Route path="play" element={<PlayPage />} />
           <Route path="play/venues" element={<WorldPage />} />
           <Route path="play/practice" element={<PracticePage />} />

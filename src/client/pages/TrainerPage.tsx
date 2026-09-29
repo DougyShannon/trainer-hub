@@ -1,7 +1,8 @@
 import { Link, useParams } from "react-router";
-import { useApi, type DeckSummary, type PokemonSummary, type RecentGame, type Trainer } from "../lib/api";
+import { useApi, type DeckSummary, type TeamSummary, type PokemonSummary, type RecentGame, type Trainer } from "../lib/api";
 import { artwork, sprite } from "../lib/sprites";
 import { DeckTile } from "../components/DeckTile";
+import { TeamTile } from "../components/TeamTile";
 import { ErrorBox, Loading } from "../components/ui";
 import { NotFoundPage } from "./NotFoundPage";
 import { timeAgo } from "./PlayPage";
@@ -11,6 +12,7 @@ type Profile = {
   trainer: Trainer;
   isMe: boolean;
   decks: (DeckSummary & { coverImage?: string | null })[];
+  teams?: TeamSummary[];
   record: { played: number; wins: number; losses: number };
   recentGames: RecentGame[];
   /** Practice ladder levels this trainer has beaten. */
@@ -27,6 +29,7 @@ export function TrainerPage() {
   if (error || !data) return <ErrorBox message={error ?? "Unknown error"} />;
 
   const { trainer, isMe, decks, record, recentGames } = data;
+  const teams = data.teams ?? [];
   const badges = OPPONENTS.filter((o) => data.badges?.includes(o.level));
   const favourite = pokemon.data?.find((p) => p.id === trainer.favouriteDex);
   const joined = new Date(trainer.createdAt.replace(" ", "T") + "Z").toLocaleDateString(undefined, { month: "long", year: "numeric" });
@@ -55,6 +58,10 @@ export function TrainerPage() {
             <div>
               <dt>{isMe ? "Decks" : "Public decks"}</dt>
               <dd>{decks.length}</dd>
+            </div>
+            <div>
+              <dt>{isMe ? "Teams" : "Public teams"}</dt>
+              <dd>{teams.length}</dd>
             </div>
             <div>
               <dt>Games played</dt>
@@ -124,6 +131,23 @@ export function TrainerPage() {
           <p className="muted">{isMe ? "You haven't built any decks yet." : `${trainer.trainerName} hasn't shared any decks yet.`}</p>
         )}
       </section>
+
+      {(isMe || teams.length > 0) && (
+        <section className="related">
+          <h2>{isMe ? "Your battle teams" : "Battle teams"}</h2>
+          {teams.length ? (
+            <div className="team-grid">
+              {teams.map((t) => (
+                <TeamTile key={t.id} team={t} to={isMe ? `/teams/${t.id}/edit` : `/teams/${t.id}`} />
+              ))}
+            </div>
+          ) : (
+            <p className="muted">
+              You haven't built any battle teams yet. <Link to="/teams/new">Build one</Link>.
+            </p>
+          )}
+        </section>
+      )}
     </div>
   );
 }
