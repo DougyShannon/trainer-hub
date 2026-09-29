@@ -943,6 +943,10 @@ textarea { resize: vertical; font: inherit; }
 .hand-role { position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%); background: var(--gold); color: #1d1500; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 1px 8px; }
 .choice-card.dim { opacity: 0.4; }
 .choice-slots { display: flex; flex-wrap: wrap; gap: 14px; }
+.choice-list { display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow-y: auto; }
+.choice-list .choice-option { text-align: left; justify-content: flex-start; }
+.choice-list .choice-option.on { border-color: var(--accent, #3b82f6); box-shadow: 0 0 0 2px var(--accent, #3b82f6) inset; font-weight: 600; }
+.table-bar .card-action { white-space: nowrap; }
 .choice-slot { display: grid; justify-items: center; gap: 4px; }
 .practice .modal .gcard { --cw: 92px; }
 .practice-result { font-size: 15px; }

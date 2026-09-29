@@ -3,6 +3,7 @@ import { otherSeat, type CardRef, type Condition, type Seat } from "../../shared
 import {
   BENCH_SIZE,
   attackCost,
+  attacksOf,
   canPay,
   cantAttackReason,
   cantPlayTrainerReason,
@@ -10,6 +11,7 @@ import {
   evolveTargets,
   isAutomated,
   isBasicPokemon,
+  isSetupBasic,
   isEnergy,
   isItem,
   isPokemon,
@@ -38,6 +40,7 @@ import { BoardButton, HalfMat, MatPile, backdropProps } from "./Mat";
 import { MATS, matById, matFor, type Mat } from "../boards/library";
 import { useBoardPrefs } from "../boards/prefs";
 import { newestTurnFirst } from "../lib/log";
+import { cardActions } from "../../shared/practice/actions";
 import { venueById } from "../../shared/venues";
 
 type Sel = { kind: "hand"; uid: string } | { kind: "slot"; side: Seat; key: SlotKey } | null;
@@ -69,11 +72,12 @@ const where = (key: SlotKey) => (key === "active" ? "Active" : `Bench ${Number(k
 
 /** Attacks this Pokémon has enough Energy attached for right now. */
 const readyAttacks = (state: PState, slot: PSlot) =>
-  topCard(slot)
-    .attacks.filter((a) => canPay(attackCost(state, slot, a), slot.energy))
+  attacksOf(state, slot)
+    .filter((a) => canPay(attackCost(state, slot, a), slot.energy, state))
     .map((a) => a.name);
 
 function PracticeSlot({
+  state,
   slot,
   label,
   onClick,
@@ -83,6 +87,7 @@ function PracticeSlot({
   drop,
   dropState = "",
 }: {
+  state: PState;
   slot: PSlot | null;
   label: string;
   onClick?: () => void;
@@ -101,7 +106,7 @@ function PracticeSlot({
     );
   }
   const top = topCard(slot);
-  const hp = maxHp(slot);
+  const hp = maxHp(state, slot);
   return (
     <button
       type="button"
@@ -192,6 +197,7 @@ function Side({
   );
   const activeSlot = (
     <PracticeSlot
+      state={state}
       slot={p.active}
       label="Active Pokémon"
       selected={isSel("active")}
@@ -203,23 +209,24 @@ function Side({
     />
   );
   const benchSlots = Array.from({ length: BENCH_SIZE }, (_, i) => {
-        const key = `bench:${i}` as SlotKey;
-        const slot = p.bench[i] ?? null;
-        const drop = !dropState ? undefined : slot ? key : "bench-empty";
-        return (
-          <PracticeSlot
-            key={i}
-            slot={slot}
-            label={`Bench ${i + 1}`}
-            selected={isSel(key)}
-            highlight={targets?.includes(key)}
-            onClick={() => onSlot(key)}
-            ready={slot && state.status === "playing" ? readyAttacks(state, slot) : undefined}
-            drop={drop}
-            dropState={drop ? dropState?.(drop) : ""}
-          />
-        );
-      });
+    const key = `bench:${i}` as SlotKey;
+    const slot = p.bench[i] ?? null;
+    const drop = !dropState ? undefined : slot ? key : "bench-empty";
+    return (
+      <PracticeSlot
+        key={i}
+        state={state}
+        slot={slot}
+        label={`Bench ${i + 1}`}
+        selected={isSel(key)}
+        highlight={targets?.includes(key)}
+        onClick={() => onSlot(key)}
+        ready={slot && state.status === "playing" ? readyAttacks(state, slot) : undefined}
+        drop={drop}
+        dropState={drop ? dropState?.(drop) : ""}
+      />
+    );
+  });
 
   if (mat) {
     const top = p.discard[p.discard.length - 1];
@@ -261,15 +268,25 @@ function Side({
       {benchSlots}
     </div>
   );
-  return <div className={`side${flipped ? " flipped" : ""}`}>{flipped ? <>{bench}{active}</> : <>{active}{bench}</>}</div>;
+  return (
+    <div className={`side${flipped ? " flipped" : ""}`}>
+      {flipped ? (
+        <>
+          {bench}
+          {active}
+        </>
+      ) : (
+        <>
+          {active}
+          {bench}
+        </>
+      )}
+    </div>
+  );
 }
 
 function Cost({ cost }: { cost: string[] }) {
-  return (
-    <span className="type-row">
-      {cost.length ? cost.map((c, i) => <Energy key={i} type={c} />) : <Energy type="Free" />}
-    </span>
-  );
+  return <span className="type-row">{cost.length ? cost.map((c, i) => <Energy key={i} type={c} />) : <Energy type="Free" />}</span>;
 }
 
 /** Everything about a Pokémon in play, with its attacks (as buttons when it's yours and Active). */
@@ -293,7 +310,7 @@ function PokemonInfo({
   const [retreating, setRetreating] = useState(false);
   if (!slot) return null;
   const top = topCard(slot);
-  const hp = maxHp(slot);
+  const hp = maxHp(state, slot);
   const myTurn = state.status === "playing" && state.current === seat && !state.prompt && !state.pendingEnd;
   const attackBlock = mine && slotKey === "active" ? cantAttackReason(state, seat) : null;
   const retreatBlock = mine ? cantRetreatReason(state, seat) : null;
@@ -306,13 +323,11 @@ function PokemonInfo({
         </strong>
         {top.weaknesses.length > 0 && <> · Weak to {top.weaknesses.map((w) => `${w.type} ${w.value}`).join(", ")}</>}
         {top.resistances.length > 0 && <> · Resists {top.resistances.map((r) => `${r.type} ${r.value}`).join(", ")}</>}
-        {" · "}Retreat {retreatCost(slot, state.turn)}
+        {" · "}Retreat {retreatCost(state, slot)}
         {prizeValue(top) > 1 && <> · Worth {prizeValue(top)} Prize cards</>}
       </p>
       {(slot.energy.length > 0 || slot.tool) && (
-        <p className="small muted">
-          Attached: {[...slot.energy.map((e) => e.name), ...(slot.tool ? [slot.tool.name] : [])].join(", ")}
-        </p>
+        <p className="small muted">Attached: {[...slot.energy.map((e) => e.name), ...(slot.tool ? [slot.tool.name] : [])].join(", ")}</p>
       )}
       {top.abilities.map((a) => (
         <div key={a.name} className="practice-attack ability">
@@ -321,7 +336,17 @@ function PokemonInfo({
           </strong>
           <span className="small">{a.text}</span>
           {mine && myTurn ? (
-            <button type="button" className="secondary-btn small" onClick={() => byHand({ card: top, text: [`${a.name}: ${a.text}`], why: "The game doesn't use Abilities for you. Do what it says with these moves." })}>
+            <button
+              type="button"
+              className="secondary-btn small"
+              onClick={() =>
+                byHand({
+                  card: top,
+                  text: [`${a.name}: ${a.text}`],
+                  why: "The game doesn't use Abilities for you. Do what it says with these moves.",
+                })
+              }
+            >
               Use {a.name} by hand
             </button>
           ) : (
@@ -329,21 +354,28 @@ function PokemonInfo({
           )}
         </div>
       ))}
-      {top.attacks.map((a, i) => {
+      {attacksOf(state, slot).map((a, i) => {
         const cost = attackCost(state, slot, a);
-        const payable = canPay(cost, slot.energy);
+        const payable = canPay(cost, slot.energy, state);
+        const fromTool = i >= top.attacks.length;
         const usable = mine && slotKey === "active" && myTurn && !attackBlock && payable;
         return (
           <div key={a.name + i} className={`practice-attack${usable ? " ready" : ""}`}>
             <div className="practice-attack-head">
               <Cost cost={cost} />
               <strong>{a.name}</strong>
+              {fromTool && <span className="small muted">from {slot.tool?.name}</span>}
               <span className="practice-dmg">{a.damage}</span>
             </div>
             {a.text && <span className="small">{a.text}</span>}
             {mine && slotKey === "active" && myTurn && (
-              <button type="button" className={usable ? "primary-btn small" : "secondary-btn small"} disabled={!usable} onClick={() => act({ type: "attack", index: i })}>
-                {usable ? `Use ${a.name}` : attackBlock ?? "Needs more Energy"}
+              <button
+                type="button"
+                className={usable ? "primary-btn small" : "secondary-btn small"}
+                disabled={!usable}
+                onClick={() => act({ type: "attack", index: i })}
+              >
+                {usable ? `Use ${a.name}` : (attackBlock ?? "Needs more Energy")}
               </button>
             )}
           </div>
@@ -367,7 +399,7 @@ function PokemonInfo({
             </>
           ) : (
             <button type="button" className="secondary-btn small" onClick={() => setRetreating(true)}>
-              Retreat (discard {retreatCost(slot, state.turn)} Energy)…
+              Retreat (discard {retreatCost(state, slot)} Energy)…
             </button>
           )}
         </div>
@@ -458,13 +490,7 @@ function HandCardActions({ state, me, card, act }: { state: PState; me: Seat; ca
         </p>
       ))}
       {card.supertype === "Trainer" && !isAutomated(card) && (
-        <p className="small practice-hand">
-          {isStadium(card)
-            ? "The game doesn't do this Stadium's effect for you. When it lets you do something, press By hand at the top of the table and do what it says."
-            : isTool(card)
-              ? "The game doesn't do this Tool's effect for you. When it matters, press By hand at the top of the table and do what it says."
-              : "You do this card's effect yourself: after you play it, the By hand moves open so you can do what it says."}
-        </p>
+        <p className="small practice-hand">The game doesn't know this card yet, so playing it does nothing.</p>
       )}
       <div className="action-buttons">{controls}</div>
     </>
@@ -517,7 +543,8 @@ function PracticePanel({
 
 function practiceHow(card: PCard): string {
   if (isBasicPokemon(card)) return "Press Put on your Bench. You can have up to 5 Pokémon there.";
-  if (isPokemon(card)) return `Press the Evolve button for the ${card.evolvesFrom ?? "Pokémon"} you want to evolve. Not on your first turn, or on a Pokémon that came into play this turn.`;
+  if (isPokemon(card))
+    return `Press the Evolve button for the ${card.evolvesFrom ?? "Pokémon"} you want to evolve. Not on your first turn, or on a Pokémon that came into play this turn.`;
   if (isEnergy(card)) return "Press Attach to… for the Pokémon you want to power up. 1 Energy from your hand per turn.";
   if (isTool(card)) return "Press Attach to… for the Pokémon that should hold it. 1 Tool per Pokémon.";
   if (isSupporter(card)) return "Press Play. Only 1 Supporter per turn.";
@@ -529,7 +556,10 @@ function practiceHow(card: PCard): string {
 function practiceGuide(state: PState, me: Seat, open: (key: SlotKey) => void, byHand: () => void): GuideRow[] {
   const p = state.players[me];
   const hand = p.hand;
-  const openActive = { label: "Show my Active Pokémon", run: () => open("active") };
+  const openActive = {
+    label: "Show my Active Pokémon",
+    run: () => open("active"),
+  };
   const basics = hand.filter(isBasicPokemon);
   const evolvable = hand.filter((c) => isPokemon(c) && !isBasicPokemon(c) && evolveTargets(state, me, c).length > 0);
   const items = hand.filter((c) => (isItem(c) || isTool(c)) && !cantPlayTrainerReason(state, me, c));
@@ -544,13 +574,23 @@ function practiceGuide(state: PState, me: Seat, open: (key: SlotKey) => void, by
   const retreatBlock = cantRetreatReason(state, me);
   const attackBlock = cantAttackReason(state, me);
   const canAttack = !attackBlock && usableAttacks(state, me).length > 0;
+  const actions = cardActions(state, me);
   return [
-    { what: "Draw a card", how: "Done for you at the start of each turn.", state: "info" },
+    {
+      what: "Draw a card",
+      how: "Done for you at the start of each turn.",
+      state: "info",
+    },
     {
       what: "Put Basic Pokémon on your Bench",
       how: "Tap a Basic Pokémon in your hand, then press Put on your Bench.",
       state: p.bench.length >= BENCH_SIZE ? "blocked" : basics.length ? "ready" : "blocked",
-      note: p.bench.length >= BENCH_SIZE ? "Your Bench is full." : basics.length ? `You have ${basics.map((c) => c.name).join(", ")}.` : "No Basic Pokémon in your hand.",
+      note:
+        p.bench.length >= BENCH_SIZE
+          ? "Your Bench is full."
+          : basics.length
+            ? `You have ${basics.map((c) => c.name).join(", ")}.`
+            : "No Basic Pokémon in your hand.",
       cards: p.bench.length >= BENCH_SIZE ? [] : uids(basics),
     },
     {
@@ -582,7 +622,7 @@ function practiceGuide(state: PState, me: Seat, open: (key: SlotKey) => void, by
       what: "Play 1 Supporter",
       how: "Tap the Supporter in your hand, then press Play.",
       state: p.supporterPlayed ? "done" : supporterBlock ? "blocked" : "ready",
-      note: p.supporterPlayed ? "Once per turn, and you've done it." : supporterBlock ?? "Once per turn.",
+      note: p.supporterPlayed ? "Once per turn, and you've done it." : (supporterBlock ?? "Once per turn."),
       cards: p.supporterPlayed ? [] : uids(supporters),
     },
     {
@@ -596,7 +636,7 @@ function practiceGuide(state: PState, me: Seat, open: (key: SlotKey) => void, by
       what: "Retreat",
       how: "Tap your Active Pokémon, press Retreat, then pick a Benched Pokémon to come in. The Energy is discarded for you.",
       state: p.retreated ? "done" : retreatBlock ? "blocked" : "ready",
-      note: p.retreated ? "Once per turn, and you've done it." : retreatBlock ?? `Costs ${retreatCost(p.active!, state.turn)} Energy.`,
+      note: p.retreated ? "Once per turn, and you've done it." : (retreatBlock ?? `Costs ${retreatCost(state, p.active!)} Energy.`),
       show: openActive,
     },
     {
@@ -607,12 +647,22 @@ function practiceGuide(state: PState, me: Seat, open: (key: SlotKey) => void, by
       show: openActive,
     },
     {
-      what: "Do what a card says, by hand",
-      how: "For Abilities, Stadiums and card text the game doesn't do for you: press By hand at the top of the table, then draw, search, heal, switch and so on.",
+      what: "Use the Stadium and other card actions",
+      how: 'When a card lets you do something during your turn (like "Once during each player\'s turn" on a Stadium), a button for it appears at the top of the table.',
+      state: actions.some((a) => !a.blocked) ? "ready" : "blocked",
+      note: actions.length ? actions.map((a) => (a.blocked ? `${a.label}: ${a.blocked}` : `${a.label}.`)).join(" ") : "Nothing in play has one right now.",
+    },
+    {
+      what: "Use an Ability, by hand",
+      how: "Abilities aren't automatic yet: tap the Pokémon, press Use by hand, then do what it says with those moves.",
       state: "ready",
       show: { label: "Open the By hand moves", run: byHand },
     },
-    { what: "End your turn", how: "Press End turn at the top of the table if you don't want to attack.", state: "info" },
+    {
+      what: "End your turn",
+      how: "Press End turn at the top of the table if you don't want to attack.",
+      state: "info",
+    },
   ];
 }
 
@@ -633,7 +683,15 @@ function ChoiceModal({ state, me, act }: { state: PState; me: Seat; act: (a: PAc
     setPicked((list) => (list.includes(id) ? list.filter((x) => x !== id) : prompt.max === 1 ? [id] : list.length < prompt.max ? [...list, id] : list));
   const valid = picked.length >= prompt.min && picked.length <= prompt.max;
   const howMany =
-    prompt.min === prompt.max ? `Choose ${prompt.min}.` : prompt.min === 0 ? `Choose up to ${prompt.max}, or none.` : `Choose ${prompt.min} to ${prompt.max}.`;
+    prompt.zone === "choice" && prompt.min === 1 && prompt.max === 1
+      ? "Choose 1."
+      : prompt.max === 0
+        ? "Have a look, then press OK."
+        : prompt.min === prompt.max
+          ? `Choose ${prompt.min}.`
+          : prompt.min === 0
+            ? `Choose up to ${prompt.max}, or none.`
+            : `Choose ${prompt.min} to ${prompt.max}.`;
 
   if (hidden) {
     return (
@@ -648,9 +706,37 @@ function ChoiceModal({ state, me, act }: { state: PState; me: Seat; act: (a: PAc
     );
   }
 
+  const cardZones: Partial<Record<typeof prompt.zone, PCard[]>> = {
+    deck: p.deck,
+    hand: p.hand,
+    discard: p.discard,
+    prizes: p.prizes,
+    lost: p.lost ?? [],
+    oppHand: opp.hand,
+    oppDeck: opp.deck,
+    oppDiscard: opp.discard,
+  };
   let options: ReactNode;
-  if (prompt.zone === "deck" || prompt.zone === "hand" || prompt.zone === "discard") {
-    const zone = prompt.zone === "deck" ? p.deck : prompt.zone === "hand" ? p.hand : p.discard;
+  const single = prompt.min === 1 && prompt.max === 1;
+  if (prompt.zone === "choice") {
+    options = (
+      <div className="choice-list">
+        {prompt.options.map((id) => (
+          <button
+            key={id}
+            type="button"
+            className={`secondary-btn choice-option${picked.includes(id) ? " on" : ""}`}
+            aria-pressed={picked.includes(id)}
+            // A single choice goes straight through; with several, pick them and then Confirm.
+            onClick={() => (single ? act({ type: "choose", picks: [id] }) : toggle(id))}
+          >
+            {prompt.labels?.[id] ?? id}
+          </button>
+        ))}
+      </div>
+    );
+  } else if (cardZones[prompt.zone]) {
+    const zone = cardZones[prompt.zone]!;
     const shown = prompt.shown ?? prompt.options;
     const cards = zone.filter((c) => shown.includes(c.uid) || prompt.options.includes(c.uid));
     // Cards you can take first, then the rest of what you're looking at.
@@ -675,7 +761,7 @@ function ChoiceModal({ state, me, act }: { state: PState; me: Seat; act: (a: PAc
           const slot = slotAt(owner, key as SlotKey);
           return (
             <div key={key} className="choice-slot">
-              <PracticeSlot slot={slot} label={where(key as SlotKey)} selected={picked.includes(key)} onClick={() => toggle(key)} />
+              <PracticeSlot state={state} slot={slot} label={where(key as SlotKey)} selected={picked.includes(key)} onClick={() => toggle(key)} />
               <span className="small muted">{where(key as SlotKey)}</span>
             </div>
           );
@@ -695,17 +781,24 @@ function ChoiceModal({ state, me, act }: { state: PState; me: Seat; act: (a: PAc
         </div>
         <p className="muted small">{howMany}</p>
         {options}
-        <div className="row-actions">
-          <button type="button" className="primary-btn" disabled={!valid} onClick={() => act({ type: "choose", picks: picked })}>
-            {picked.length === 0 && prompt.min === 0 ? "Take nothing" : "Confirm"}
-          </button>
-        </div>
+        {!(prompt.zone === "choice" && single) && (
+          <div className="row-actions">
+            <button type="button" className="primary-btn" disabled={!valid} onClick={() => act({ type: "choose", picks: picked })}>
+              {prompt.max === 0 ? "OK" : picked.length === 0 && prompt.min === 0 ? (prompt.zone === "choice" ? "None" : "Take nothing") : "Confirm"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-export type Opponent = { name: string; title: string; ace: number; venue?: string };
+export type Opponent = {
+  name: string;
+  title: string;
+  ace: number;
+  venue?: string;
+};
 
 export function PracticeTable({
   state,
@@ -734,7 +827,10 @@ export function PracticeTable({
   const myTurn = state.status === "playing" && state.current === me;
   const canAct = myTurn && !state.prompt && !state.pendingEnd;
   const [sel, setSel] = useState<Sel>(null);
-  const [setupPick, setSetupPick] = useState<{ active: string | null; bench: string[] }>({ active: null, bench: [] });
+  const [setupPick, setSetupPick] = useState<{
+    active: string | null;
+    bench: string[];
+  }>({ active: null, bench: [] });
   const [pile, setPile] = useState<{ title: string; cards: PCard[] } | null>(null);
   const [confirmConcede, setConfirmConcede] = useState(false);
   // The turn guide option whose cards are raised in your hand.
@@ -752,7 +848,11 @@ export function PracticeTable({
     if (a.type === "playTrainer") {
       const card = mine.hand.find((c) => c.uid === a.uid);
       if (card && !isAutomated(card) && !isStadium(card) && !cantPlayTrainerReason(state, me, card)) {
-        setByHand({ card, text: cardText(card), why: "The game doesn't do this card's effect for you. Do what it says with these moves, then press Done." });
+        setByHand({
+          card,
+          text: cardText(card),
+          why: "The game doesn't do this card's effect for you. Do what it says with these moves, then press Done.",
+        });
       }
     }
     setRaise(null);
@@ -822,7 +922,7 @@ export function PracticeTable({
 
   const settingUp = state.status === "setup" && !state.setupDone[me];
   const toggleSetup = (c: PCard) => {
-    if (!isBasicPokemon(c)) return;
+    if (!isSetupBasic(c)) return;
     setSetupPick((s) => {
       if (s.active === c.uid) return { active: s.bench[0] ?? null, bench: s.bench.slice(1) };
       if (s.bench.includes(c.uid)) return { ...s, bench: s.bench.filter((u) => u !== c.uid) };
@@ -848,13 +948,10 @@ export function PracticeTable({
     <GameCard
       card={ref(state.stadium.card)}
       label={`Stadium: ${state.stadium.card.name}`}
-      onClick={
-        canAct
-          ? () => setByHand({ card: state.stadium!.card, text: cardText(state.stadium!.card), why: "The game doesn't do Stadium effects for you. If this one lets you do something, do it with these moves." })
-          : undefined
-      }
+      onClick={() => setPile({ title: "The Stadium in play", cards: [state.stadium!.card] })}
     />
   );
+  const actions = state.status === "playing" ? cardActions(state, me) : [];
 
   const tag = (name: string, img: string, detail: string) => (
     <div className="player-tag">
@@ -872,8 +969,26 @@ export function PracticeTable({
         <span className={`turn-pill${myTurn ? " mine" : ""}`}>{turnLabel}</span>
         {thinking && <span className="turn-pill thinking">{theirs.name} is thinking…</span>}
         <span className="bar-spacer" />
+        {actions.map((a) => (
+          <button
+            key={a.id}
+            type="button"
+            className="secondary-btn small card-action"
+            disabled={!canAct || !!a.blocked}
+            title={a.blocked ?? a.card.rules.join(" ")}
+            onClick={() => play({ type: "special", id: a.id })}
+          >
+            {a.label}
+          </button>
+        ))}
         {state.status === "playing" && (
-          <button type="button" className="secondary-btn small" disabled={!canAct} onClick={() => setByHand(null)} title="Do what a card says when the game doesn't do it for you">
+          <button
+            type="button"
+            className="secondary-btn small"
+            disabled={!canAct}
+            onClick={() => setByHand(null)}
+            title="Do what a card says when the game doesn't do it for you"
+          >
             By hand
           </button>
         )}
@@ -893,9 +1008,7 @@ export function PracticeTable({
       {settingUp && (
         <div className="banner">
           {setupPick.active ? (
-            <>
-              Tap more Basic Pokémon to put them on your Bench (up to 5), then press Ready.
-            </>
+            <>Tap more Basic Pokémon to put them on your Bench (up to 5), then press Ready.</>
           ) : (
             <>
               Tap a Basic Pokémon in your hand to make it your <strong>Active Pokémon</strong>.
@@ -906,7 +1019,13 @@ export function PracticeTable({
               type="button"
               className="primary-btn small"
               disabled={!setupPick.active}
-              onClick={() => act({ type: "setup", active: setupPick.active!, bench: setupPick.bench })}
+              onClick={() =>
+                act({
+                  type: "setup",
+                  active: setupPick.active!,
+                  bench: setupPick.bench,
+                })
+              }
             >
               Ready
             </button>
@@ -934,7 +1053,12 @@ export function PracticeTable({
                 tag={tag(theirs.name, sprite(opponent.ace), `${opponent.title} · ${theirs.hand.length} in hand`)}
                 sel={sel}
                 onSlot={(key) => slotAt(theirs, key) && setSel({ kind: "slot", side: oppSeat, key })}
-                onDiscard={() => setPile({ title: `${theirs.name}'s discard pile`, cards: theirs.discard })}
+                onDiscard={() =>
+                  setPile({
+                    title: `${theirs.name}'s discard pile`,
+                    cards: theirs.discard,
+                  })
+                }
               />
               <Side
                 state={state}
@@ -950,50 +1074,56 @@ export function PracticeTable({
               />
             </div>
           ) : (
-          <>
-          <div className="stadium-rail">
-            <div className="stadium">
-              {state.stadium ? (
-                <GameCard
-                  card={ref(state.stadium.card)}
-                  size="sm"
-                  label={`Stadium: ${state.stadium.card.name}`}
-                  onClick={
-                    canAct
-                      ? () => setByHand({ card: state.stadium!.card, text: cardText(state.stadium!.card), why: "The game doesn't do Stadium effects for you. If this one lets you do something, do it with these moves." })
-                      : undefined
+            <>
+              <div className="stadium-rail">
+                <div className="stadium">
+                  {state.stadium ? (
+                    <GameCard
+                      card={ref(state.stadium.card)}
+                      size="sm"
+                      label={`Stadium: ${state.stadium.card.name}`}
+                      onClick={() =>
+                        setPile({
+                          title: "The Stadium in play",
+                          cards: [state.stadium!.card],
+                        })
+                      }
+                    />
+                  ) : (
+                    <span className="gcard sm empty" />
+                  )}
+                  <span className="pile-label">Stadium</span>
+                </div>
+              </div>
+              <div className="play-area">
+                <Side
+                  state={state}
+                  p={theirs}
+                  seat={oppSeat}
+                  flipped
+                  tag={tag(theirs.name, sprite(opponent.ace), `${opponent.title} · ${theirs.hand.length} in hand`)}
+                  sel={sel}
+                  onSlot={(key) => slotAt(theirs, key) && setSel({ kind: "slot", side: oppSeat, key })}
+                  onDiscard={() =>
+                    setPile({
+                      title: `${theirs.name}'s discard pile`,
+                      cards: theirs.discard,
+                    })
                   }
                 />
-              ) : (
-                <span className="gcard sm empty" />
-              )}
-              <span className="pile-label">Stadium</span>
-            </div>
-          </div>
-          <div className="play-area">
-          <Side
-            state={state}
-            p={theirs}
-            seat={oppSeat}
-            flipped
-            tag={tag(theirs.name, sprite(opponent.ace), `${opponent.title} · ${theirs.hand.length} in hand`)}
-            sel={sel}
-            onSlot={(key) => slotAt(theirs, key) && setSel({ kind: "slot", side: oppSeat, key })}
-            onDiscard={() => setPile({ title: `${theirs.name}'s discard pile`, cards: theirs.discard })}
-          />
-          <div className="midline" />
-          <Side
-            state={state}
-            p={mine}
-            seat={me}
-            tag={tag(you.name, sprite(you.avatar), `${mine.hand.length} in hand`)}
-            sel={sel}
-            onSlot={(key) => slotAt(mine, key) && setSel({ kind: "slot", side: me, key })}
-            onDiscard={() => setPile({ title: "Your discard pile", cards: mine.discard })}
-            dropState={canAct ? drag.dropState : undefined}
-          />
-          </div>
-          </>
+                <div className="midline" />
+                <Side
+                  state={state}
+                  p={mine}
+                  seat={me}
+                  tag={tag(you.name, sprite(you.avatar), `${mine.hand.length} in hand`)}
+                  sel={sel}
+                  onSlot={(key) => slotAt(mine, key) && setSel({ kind: "slot", side: me, key })}
+                  onDiscard={() => setPile({ title: "Your discard pile", cards: mine.discard })}
+                  dropState={canAct ? drag.dropState : undefined}
+                />
+              </div>
+            </>
           )}
           <div className={`my-hand${raise ? " raising" : ""}`} aria-label="Your hand">
             {mine.hand.length ? (
@@ -1002,7 +1132,7 @@ export function PracticeTable({
                 return (
                   <div
                     key={c.uid}
-                    className={`hand-card${settingUp && !isBasicPokemon(c) ? " dim" : ""}${drag.dragging?.uid === c.uid ? " lifted" : ""}${raise ? (raise.cards.includes(c.uid) ? " raised" : " sunk") : ""}`}
+                    className={`hand-card${settingUp && !isSetupBasic(c) ? " dim" : ""}${drag.dragging?.uid === c.uid ? " lifted" : ""}${raise ? (raise.cards.includes(c.uid) ? " raised" : " sunk") : ""}`}
                     {...(canAct ? drag.source(c, { name: c.name, image: c.image }) : {})}
                   >
                     <GameCard
@@ -1022,7 +1152,13 @@ export function PracticeTable({
 
         <aside className="table-side">
           {selected ? (
-            <PracticePanel card={selected} title={selected.name} close={() => setSel(null)} how={canAct ? practiceHow(selected) : null} controls={<HandCardActions state={state} me={me} card={selected} act={play} />} />
+            <PracticePanel
+              card={selected}
+              title={selected.name}
+              close={() => setSel(null)}
+              how={canAct ? practiceHow(selected) : null}
+              controls={<HandCardActions state={state} me={me} card={selected} act={play} />}
+            />
           ) : sel?.kind === "slot" && selectedSlot ? (
             <PracticePanel
               card={topCard(selectedSlot)}
@@ -1040,7 +1176,17 @@ export function PracticeTable({
                     : "Press Retreat your Active and send this in to swap it into the Active Spot (it costs your Active's Retreat cost)."
                   : null
               }
-              body={<PokemonInfo key={`${sel.side}${sel.key}`} state={state} seat={sel.side} slotKey={sel.key} mine={sel.side === me} act={act} byHand={setByHand} />}
+              body={
+                <PokemonInfo
+                  key={`${sel.side}${sel.key}`}
+                  state={state}
+                  seat={sel.side}
+                  slotKey={sel.key}
+                  mine={sel.side === me}
+                  act={act}
+                  byHand={setByHand}
+                />
+              }
             />
           ) : (
             <div className="action-panel idle">
@@ -1053,10 +1199,10 @@ export function PracticeTable({
                   {state.prompt?.seat === me
                     ? "Finish your choice to carry on."
                     : state.status === "setup"
-                    ? "Pick your starting Pokémon from your hand."
-                    : state.status === "finished"
-                      ? "Tap any Pokémon to look at it."
-                      : `${theirs.name} is taking their turn. Tap any Pokémon to look at it.`}
+                      ? "Pick your starting Pokémon from your hand."
+                      : state.status === "finished"
+                        ? "Tap any Pokémon to look at it."
+                        : `${theirs.name} is taking their turn. Tap any Pokémon to look at it.`}
                 </p>
               )}
             </div>
@@ -1064,7 +1210,12 @@ export function PracticeTable({
           {canAct && (
             <TurnGuide
               title="Your turn: what you can do"
-              rows={practiceGuide(state, me, (key) => setSel({ kind: "slot", side: me, key }), () => setByHand(null))}
+              rows={practiceGuide(
+                state,
+                me,
+                (key) => setSel({ kind: "slot", side: me, key }),
+                () => setByHand(null),
+              )}
               picked={raise?.what}
               onPick={(row) => setRaise(row ? { what: row.what, cards: row.cards ?? [] } : null)}
             />

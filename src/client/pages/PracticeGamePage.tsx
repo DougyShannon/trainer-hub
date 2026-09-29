@@ -5,7 +5,7 @@ import { useAuth } from "../lib/auth";
 import { ErrorBox, Loading } from "../components/ui";
 import { PracticeTable } from "../components/PracticeTable";
 import { VenueFrame } from "../components/Venue";
-import { applyPractice, newPracticeGame, RuleError } from "../../shared/practice/engine";
+import { applyPractice, newPracticeGame, normalize, RuleError } from "../../shared/practice/engine";
 import { botAction } from "../../shared/practice/bot";
 import { OPPONENTS, opponentByLevel, type Opponent } from "../../shared/practice/opponents";
 import type { PAction, PCard, PState } from "../../shared/practice/types";
@@ -22,7 +22,10 @@ const expand = (deck: DeckData, prefix: string): PCard[] => {
 const readSaved = (key: string): Saved | null => {
   try {
     const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as Saved) : null;
+    if (!raw) return null;
+    const saved = JSON.parse(raw) as Saved;
+    normalize(saved.state);
+    return saved;
   } catch {
     return null;
   }

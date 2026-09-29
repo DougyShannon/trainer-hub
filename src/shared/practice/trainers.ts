@@ -1,7 +1,6 @@
 // The Trainer cards practice games play automatically. Each entry says when the card can be
 // played, what it does, and (for cards that need a choice) what happens once the choice is made.
-// More everyday cards live in trainers-more.ts. Anything in neither list is played "by hand"
-// with the table's manual tools (see manual.ts).
+// More everyday cards live in trainers-more.ts and the rest in trainers-extra.ts.
 
 import { otherSeat, type Seat } from "../game-types";
 import {
@@ -15,18 +14,19 @@ import {
   isPokemon,
   isSupporter,
   isTool,
+  benchPokemon,
   log,
-  newSlot,
   plural,
   shuffle,
   slotAt,
   slotKeys,
   switchActive,
   topCard,
-  BENCH_SIZE,
 } from "./engine";
-import type { PCard, PPlayer, PSlot, PState, SlotKey } from "./types";
+import type { PCard, PPlayer, PState, SlotKey } from "./types";
 import { moreTrainers } from "./trainers-more";
+import { extraTrainers } from "./trainers-extra";
+import { benchLimit, supporterProof } from "./effects";
 
 type Data = Record<string, unknown>;
 export type TrainerEffect = {
@@ -67,7 +67,17 @@ export function searchDeck(state: PState, seat: Seat, card: PCard, title: string
     log(state, seat, `${p.name} searched their deck but found nothing for ${card.name}.`);
     return;
   }
-  ask(state, { seat, title, zone: "deck", options, shown: p.deck.map((c) => c.uid), min: 0, max, effect: card.name, data });
+  ask(state, {
+    seat,
+    title,
+    zone: "deck",
+    options,
+    shown: p.deck.map((c) => c.uid),
+    min: 0,
+    max,
+    effect: card.name,
+    data,
+  });
 }
 
 /** Looks at the top N cards; the player may take matching ones and the rest are shuffled back. */
@@ -80,7 +90,16 @@ function lookAtTop(state: PState, seat: Seat, card: PCard, n: number, title: str
     log(state, seat, `${p.name} looked at the top ${plural(top.length, "card")} and found nothing for ${card.name}.`);
     return;
   }
-  ask(state, { seat, title, zone: "deck", options, shown: top.map((c) => c.uid), min: 0, max: 1, effect: card.name });
+  ask(state, {
+    seat,
+    title,
+    zone: "deck",
+    options,
+    shown: top.map((c) => c.uid),
+    min: 0,
+    max: 1,
+    effect: card.name,
+  });
 }
 
 export function toHand(state: PState, seat: Seat, card: PCard, picks: string[]) {
@@ -93,13 +112,15 @@ export function toHand(state: PState, seat: Seat, card: PCard, picks: string[]) 
 
 export function toBench(state: PState, seat: Seat, card: PCard, picks: string[]) {
   const p = me(state, seat);
-  const found = pull(p.deck, picks).slice(0, BENCH_SIZE - p.bench.length);
-  for (const c of found) p.bench.push(newSlot(c, state.turn));
+  const taken = pull(p.deck, picks);
+  const found = taken.slice(0, benchLimit(state, seat) - p.bench.length);
+  p.deck.push(...taken.slice(found.length));
+  for (const c of found) benchPokemon(state, seat, c);
   shuffle(p.deck);
   log(state, seat, `${p.name} put ${names(found)} onto their Bench with ${card.name}.`);
 }
 
-export const benchFull = (state: PState, seat: Seat) => (me(state, seat).bench.length >= BENCH_SIZE ? "Your Bench is full." : null);
+export const benchFull = (state: PState, seat: Seat) => (me(state, seat).bench.length >= benchLimit(state, seat) ? "Your Bench is full." : null);
 
 /** "Discard N other cards from your hand" costs, asked before the effect. */
 export function discardCost(state: PState, seat: Seat, card: PCard, n: number) {
@@ -127,11 +148,13 @@ export const needsOtherCards = (n: number) => (state: PState, seat: Seat) =>
 /** Moves the chosen opponent's Benched Pokémon into their Active Spot. */
 export function gust(state: PState, seat: Seat, card: PCard) {
   const opp = them(state, seat);
+  const options = benchSlots(opp).filter((k) => !isSupporter(card) || !supporterProof(state, opp.bench[Number(k.split(":")[1])]));
+  if (!options.length) return log(state, seat, `Leafy Camo Poncho protects ${opp.name}'s Benched Pokémon from ${card.name}.`);
   ask(state, {
     seat,
     title: `Choose 1 of ${opp.name}'s Benched Pokémon to switch into the Active Spot`,
     zone: "oppBench",
-    options: benchSlots(opp),
+    options,
     min: 1,
     max: 1,
     effect: card.name,
@@ -241,14 +264,21 @@ export const TRAINERS: Record<string, TrainerEffect> = {
         card,
         "Choose up to 2 Basic Pokémon with 70 HP or less for your Bench",
         (c) => isBasicPokemon(c) && (c.hp ?? 0) <= 70,
-        Math.min(2, BENCH_SIZE - me(state, seat).bench.length),
+        Math.min(2, benchLimit(state, seat) - me(state, seat).bench.length),
       ),
     resume: (state, seat, picks) => toBench(state, seat, { name: "Buddy-Buddy Poffin" } as PCard, picks),
   },
   "Battle VIP Pass": {
     canPlay: (state, seat) => (state.turn > 2 ? "You can use this card only during your first turn." : benchFull(state, seat)),
     play: (state, seat, card) =>
-      searchDeck(state, seat, card, "Choose up to 2 Basic Pokémon for your Bench", isBasicPokemon, Math.min(2, BENCH_SIZE - me(state, seat).bench.length)),
+      searchDeck(
+        state,
+        seat,
+        card,
+        "Choose up to 2 Basic Pokémon for your Bench",
+        isBasicPokemon,
+        Math.min(2, benchLimit(state, seat) - me(state, seat).bench.length),
+      ),
     resume: (state, seat, picks) => toBench(state, seat, { name: "Battle VIP Pass" } as PCard, picks),
   },
   "Ultra Ball": {
@@ -353,7 +383,8 @@ export const TRAINERS: Record<string, TrainerEffect> = {
     resume: (state, seat, picks) => TRAINERS["Energy Retrieval"].resume!(state, seat, picks, {}),
   },
   "Super Rod": {
-    canPlay: (state, seat) => (me(state, seat).discard.some((c) => isPokemon(c) || isBasicEnergy(c)) ? null : "There's nothing in your discard pile to shuffle back."),
+    canPlay: (state, seat) =>
+      me(state, seat).discard.some((c) => isPokemon(c) || isBasicEnergy(c)) ? null : "There's nothing in your discard pile to shuffle back.",
     play(state, seat, card) {
       const p = me(state, seat);
       ask(state, {
@@ -475,8 +506,14 @@ export const TRAINERS: Record<string, TrainerEffect> = {
     resume(state, seat, picks, data) {
       const p = me(state, seat);
       if (data.step === "stage2") {
-        const options = candyPairs(state, seat).filter((x) => x.hand === picks[0]).map((x) => x.slot);
-        if (options.length === 1) return TRAINERS["Rare Candy"].resume!(state, seat, options, { step: "basic", stage2: picks[0] });
+        const options = candyPairs(state, seat)
+          .filter((x) => x.hand === picks[0])
+          .map((x) => x.slot);
+        if (options.length === 1)
+          return TRAINERS["Rare Candy"].resume!(state, seat, options, {
+            step: "basic",
+            stage2: picks[0],
+          });
         ask(state, {
           seat,
           title: "Choose the Basic Pokémon to evolve",
@@ -501,33 +538,5 @@ export const TRAINERS: Record<string, TrainerEffect> = {
 /** The effect for a Trainer card. Reprints like "Boss's Orders (Ghetsis)" share one entry. */
 export const trainerFor = (name: string): TrainerEffect | undefined => {
   const base = name.replace(/\s*\(.*\)$/, "");
-  return TRAINERS[base] ?? moreTrainers()[base];
+  return TRAINERS[base] ?? moreTrainers()[base] ?? extraTrainers()[base];
 };
-
-// ----- Pokémon Tools -----
-
-const isEx = (c: PCard) => c.subtypes.includes("ex");
-const isV = (c: PCard) => c.subtypes.some((s) => s === "V" || s === "VMAX" || s === "VSTAR");
-
-/** Extra damage from the attacker's Tool, before Weakness and Resistance. */
-export function toolDamageBonus(state: PState, seat: Seat, attacker: PSlot, defender: PSlot) {
-  const tool = attacker.tool?.name;
-  const target = topCard(defender);
-  if (tool === "Vitality Band") return 10;
-  if (tool === "Muscle Band") return 20;
-  if (tool === "Choice Belt" && isV(target)) return 30;
-  if (tool === "Maximum Belt" && isEx(target)) return 50;
-  if (tool === "Defiance Band" && me(state, seat).prizes.length > them(state, seat).prizes.length) return 30;
-  return 0;
-}
-
-/** Extra HP from a Pokémon's Tool. */
-export function toolHpBonus(slot: PSlot) {
-  const tool = slot.tool?.name;
-  if (tool === "Hero's Cape") return 100;
-  if (tool === "Big Charm") return 30;
-  if (tool === "Bravery Charm" && isBasicPokemon(topCard(slot))) return 50;
-  return 0;
-}
-
-export const AUTOMATED_TOOLS = ["Vitality Band", "Muscle Band", "Choice Belt", "Maximum Belt", "Defiance Band", "Hero's Cape", "Big Charm", "Bravery Charm"];

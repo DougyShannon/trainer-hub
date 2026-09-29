@@ -22,10 +22,14 @@ import {
   slotKeys,
   topCard,
   usableAttacks,
+  attacksOf,
+  isStadium,
   BENCH_SIZE,
 } from "./engine";
 import { countFor, finalDamage } from "./attacks";
-import { AUTOMATED_TOOLS, trainerFor } from "./trainers";
+import { trainerFor } from "./trainers";
+import { baseName, isAutomatedTool } from "./effects";
+import { cardActions } from "./actions";
 import type { Attack, PAction, PCard, PPlayer, PSlot, PState, SlotKey } from "./types";
 
 export type BotSkill = {
@@ -51,7 +55,7 @@ const seedOf = (state: PState) => state.players.p1.prizes[0]?.uid ?? "";
 
 /** How many Energy are still missing to pay `cost`. */
 export function missing(cost: string[], energy: PCard[]) {
-  const pool = energy.flatMap(energyProvides);
+  const pool = energy.flatMap((e) => energyProvides(e));
   let miss = 0;
   for (const need of cost.filter((c) => c !== "Colorless" && c !== "Free")) {
     const i = pool.indexOf(need);
@@ -67,7 +71,7 @@ function estimate(state: PState, seat: Seat, attacker: PSlot, attack: Attack, de
   let base = parseInt(attack.damage, 10) || 0;
   let m: RegExpMatchArray | null;
   if ((m = text.match(/Flip (\w+) coins?\. This attack does (\d+) damage (?:for|times the number of) (?:each )?heads/i))) {
-    const n = /^\d+$/.test(m[1]) ? Number(m[1]) : ({ a: 1, two: 2, three: 3, four: 4, five: 5 } as Record<string, number>)[m[1].toLowerCase()] ?? 1;
+    const n = /^\d+$/.test(m[1]) ? Number(m[1]) : (({ a: 1, two: 2, three: 3, four: 4, five: 5 } as Record<string, number>)[m[1].toLowerCase()] ?? 1);
     base = (Number(m[2]) * n) / 2;
   } else if ((m = text.match(/Flip a coin until you get tails\. This attack does (\d+)/i))) {
     base = text.includes("more damage") ? base + Number(m[1]) : Number(m[1]);
@@ -89,12 +93,12 @@ function attackValue(state: PState, seat: Seat, attack: Attack) {
   if (!p.active || !opp.active) return 0;
   const damage = estimate(state, seat, p.active, attack, opp.active);
   let value = damage;
-  if (damage >= hpLeft(opp.active)) value += 1000 + prizeValue(topCard(opp.active)) * 100;
+  if (damage >= hpLeft(state, opp.active)) value += 1000 + prizeValue(topCard(opp.active)) * 100;
   const text = attack.text ?? "";
   if (/is now (Asleep|Burned|Confused|Paralyzed|Poisoned)/i.test(text)) value += 20;
   if (/damage to each of your opponent's Benched/i.test(text)) value += 10 * opp.bench.length;
   if (/^Draw \w+ cards?/i.test(text)) value += 10;
-  if (/This Pokémon also does (\d+) damage to itself/i.test(text) && p.active.damage + 50 >= hpLeft(p.active)) value -= 60;
+  if (/This Pokémon also does (\d+) damage to itself/i.test(text) && p.active.damage + 50 >= hpLeft(state, p.active)) value -= 60;
   if (/Discard (all|\d+|an?|two|three) (\w+ )?Energy/i.test(text)) value -= 15;
   return value;
 }
@@ -102,8 +106,13 @@ function attackValue(state: PState, seat: Seat, attack: Attack) {
 /** How ready a Pokémon is to fight: can it attack, and how much HP does it have left. */
 function readiness(state: PState, slot: PSlot) {
   const best = Math.min(...topCard(slot).attacks.map((a) => missing(a.cost, slot.energy)), 9);
-  const strongest = Math.max(0, ...topCard(slot).attacks.filter((a) => canPay(a.cost, slot.energy)).map((a) => parseInt(a.damage, 10) || 0));
-  return (best === 0 ? 200 : 100 - best * 25) + strongest + hpLeft(slot) / 5;
+  const strongest = Math.max(
+    0,
+    ...topCard(slot)
+      .attacks.filter((a) => canPay(a.cost, slot.energy))
+      .map((a) => parseInt(a.damage, 10) || 0),
+  );
+  return (best === 0 ? 200 : 100 - best * 25) + strongest + hpLeft(state, slot) / 5;
 }
 
 const benchIndexOf = (key: string) => Number(key.split(":")[1]);
@@ -129,7 +138,11 @@ function chooseSetup(state: PState, seat: Seat, skill: BotSkill): PAction {
   };
   const ordered = skill.smart ? [...basics].sort((a, b) => starter(b) - starter(a)) : basics;
   const [active, ...rest] = ordered;
-  return { type: "setup", active: active.uid, bench: rest.slice(0, skill.benchMax).map((c) => c.uid) };
+  return {
+    type: "setup",
+    active: active.uid,
+    bench: rest.slice(0, skill.benchMax).map((c) => c.uid),
+  };
 }
 
 function mainPhase(state: PState, seat: Seat, skill: BotSkill): PAction {
@@ -208,11 +221,21 @@ function mainPhase(state: PState, seat: Seat, skill: BotSkill): PAction {
     }
   }
 
-  // 5. Tools that do something.
-  const tool = p.hand.find((c) => isTool(c) && AUTOMATED_TOOLS.includes(c.name));
+  // 5. Tools that do something (Technical Machines are left for people to use).
+  const tool = p.hand.find((c) => isTool(c) && isAutomatedTool(baseName(c.name)) && !c.name.startsWith("Technical Machine") && playable(c));
   if (tool && !skip(tool.uid)) {
     const target = toolTarget(p, tool);
     if (target) return { type: "attachTool", uid: tool.uid, slot: target };
+  }
+
+  // 5b. A Stadium, if there isn't one of ours in play.
+  const stadium = p.hand.find((c) => isStadium(c) && playable(c));
+  if (stadium && state.stadium?.owner !== seat && !skip(stadium.uid)) return { type: "playTrainer", uid: stadium.uid };
+
+  // 5c. Stadium uses and other card actions that are worth it.
+  for (const a of cardActions(state, seat)) {
+    if (a.blocked || skip(a.id) || !actionWorthIt(state, seat, a.id, a.card)) continue;
+    return { type: "special", id: a.id };
   }
 
   // 6. Energy.
@@ -231,14 +254,14 @@ function mainPhase(state: PState, seat: Seat, skill: BotSkill): PAction {
       if (score > bestScore) [best, bestScore] = [i, score];
     });
     const cost = topCard(p.active).retreat;
-    const spareEnergy = p.active.energy.flatMap(energyProvides).length >= cost;
+    const spareEnergy = p.active.energy.flatMap((e) => energyProvides(e)).length >= cost;
     if (best >= 0 && spareEnergy && !skip("retreat")) return { type: "retreat", bench: best };
   }
 
   // 8. Attack, or end the turn.
   const attacks = usableAttacks(state, seat);
   if (attacks.length && !cantAttackReason(state, seat)) {
-    const active = topCard(p.active!);
+    const active = { attacks: attacksOf(state, p.active!) };
     if (skip("attack-choice")) {
       const pick = attacks[Math.floor(roll(`${state.turn}:pick`) * attacks.length)];
       return { type: "attack", index: pick };
@@ -252,6 +275,20 @@ function mainPhase(state: PState, seat: Seat, skill: BotSkill): PAction {
     if (bestValue > 0) return { type: "attack", index: best };
   }
   return { type: "endTurn" };
+}
+
+/** Whether a card action (usually a Stadium's) helps the computer right now. */
+function actionWorthIt(state: PState, seat: Seat, id: string, card: PCard) {
+  const p = state.players[seat];
+  if (id.startsWith("fossil:") || id.startsWith("grant:")) return false;
+  if (id.startsWith("seal:")) return baseName(card.name) === "Forest Seal Stone";
+  const name = baseName(card.name);
+  if (name === "Jubilife Village") return p.hand.length <= 2;
+  if (name === "Prism Tower") return p.hand.length >= 7;
+  if (name === "Cycling Road") return p.hand.filter(isBasicEnergy).length >= 3;
+  if (name === "Moonlit Hill") return slotKeys(p).some((k) => slotAt(p, k)!.damage >= 30);
+  if (name === "Academy at Night" || name === "Primordial Altar") return false;
+  return true;
 }
 
 function usableOn(slot: PSlot) {
@@ -270,7 +307,7 @@ function gustTarget(state: PState, seat: Seat): number | null {
   if (!p.active || !opp.active || !opp.bench.length || cantAttackReason(state, seat)) return null;
   const attacks = usableOn(p.active);
   if (!attacks.length) return null;
-  const knocksOut = (slot: PSlot) => attacks.some((a) => estimate(state, seat, p.active!, a, slot) >= hpLeft(slot));
+  const knocksOut = (slot: PSlot) => attacks.some((a) => estimate(state, seat, p.active!, a, slot) >= hpLeft(state, slot));
   const activeValue = knocksOut(opp.active) ? prizeValue(topCard(opp.active)) : 0;
   let best: number | null = null;
   let bestValue = activeValue;
@@ -316,7 +353,7 @@ function energyChoice(state: PState, seat: Seat, skill: BotSkill): { uid: string
       }
       if (!score) continue;
       if (key === "active") score += 25;
-      if (key === "active" && state.players[otherSeat(seat)].active && hpLeft(slot) <= 40) score -= 30; // about to be Knocked Out
+      if (key === "active" && state.players[otherSeat(seat)].active && hpLeft(state, slot) <= 40) score -= 30; // about to be Knocked Out
       if (score > bestScore) [best, bestScore] = [{ uid: e.uid, slot: key }, score];
     }
   }
@@ -334,7 +371,27 @@ function answerPrompt(state: PState, seat: Seat, skill: BotSkill): string[] {
   const shuffled = [...prompt.options].sort((a, b) => roll(`${state.turn}:${a}`) - roll(`${state.turn}:${b}`));
   const pickCount = Math.max(1, prompt.min);
 
+  if (prompt.max === 0) return [];
+  const hint = prompt.data?.botPick as string[] | undefined;
+  if (hint && hint.every((h) => prompt.options.includes(h))) return hint;
+
   switch (prompt.zone) {
+    case "choice":
+      return prompt.options.slice(0, Math.max(1, prompt.min));
+    case "prizes":
+    case "lost":
+      return prompt.options.slice(0, Math.max(prompt.min, Math.min(1, prompt.max)));
+    case "oppHand":
+    case "oppDeck":
+    case "oppDiscard": {
+      // Take the cards the other player would most like to keep.
+      const zone = prompt.zone === "oppHand" ? opp.hand : prompt.zone === "oppDeck" ? opp.deck : opp.discard;
+      const cards = byUid(zone);
+      const ranked = [...prompt.options].sort((a, b) => want(state, otherSeat(seat), cards.get(b)!) - want(state, otherSeat(seat), cards.get(a)!));
+      return take(ranked);
+    }
+    case "anyPokemon":
+      return prompt.options.slice(0, Math.max(1, prompt.min));
     case "myBench": {
       if (!skill.smart) return shuffled.slice(0, pickCount);
       return [...prompt.options].sort((a, b) => readiness(state, p.bench[benchIndexOf(b)]) - readiness(state, p.bench[benchIndexOf(a)])).slice(0, pickCount);
@@ -345,7 +402,7 @@ function answerPrompt(state: PState, seat: Seat, skill: BotSkill): string[] {
         const amount = Number(prompt.data?.amount ?? 0);
         const score = (key: string) => {
           const s = opp.bench[benchIndexOf(key)];
-          return (hpLeft(s) <= amount ? 1000 + prizeValue(topCard(s)) * 100 : 0) - hpLeft(s);
+          return (hpLeft(state, s) <= amount ? 1000 + prizeValue(topCard(s)) * 100 : 0) - hpLeft(state, s);
         };
         return [...prompt.options].sort((a, b) => score(b) - score(a)).slice(0, pickCount);
       }
@@ -354,18 +411,19 @@ function answerPrompt(state: PState, seat: Seat, skill: BotSkill): string[] {
       // Nothing to Knock Out: pull up something that's slow to retreat or has no Energy.
       const stuck = (key: string) => {
         const s = opp.bench[benchIndexOf(key)];
-        return topCard(s).retreat * 10 - s.energy.length * 15 - hpLeft(s) / 10;
+        return topCard(s).retreat * 10 - s.energy.length * 15 - hpLeft(state, s) / 10;
       };
       return [...prompt.options].sort((a, b) => stuck(b) - stuck(a)).slice(0, pickCount);
     }
     case "oppPokemon": {
       const amount = Number(prompt.data?.amount ?? 0);
       const slotOf = (key: string) => (key === "active" ? opp.active! : opp.bench[benchIndexOf(key)]);
-      const score = (key: string) => (hpLeft(slotOf(key)) <= amount ? 1000 + prizeValue(topCard(slotOf(key))) * 100 : 0) - hpLeft(slotOf(key));
+      const score = (key: string) => (hpLeft(state, slotOf(key)) <= amount ? 1000 + prizeValue(topCard(slotOf(key))) * 100 : 0) - hpLeft(state, slotOf(key));
       return skill.smart ? [[...prompt.options].sort((a, b) => score(b) - score(a))[0]] : [shuffled[0]];
     }
     case "myPokemon": {
       if (prompt.effect === "Rare Candy") return [prompt.options.includes("active") ? "active" : prompt.options[0]];
+      if (["attach", "target"].includes(String(prompt.data?.step))) return [prompt.options.includes("active") ? "active" : prompt.options[0]];
       const hurt = (key: string) => slotAt(p, key as SlotKey)!.damage;
       return [[...prompt.options].sort((a, b) => hurt(b) - hurt(a))[0]];
     }
