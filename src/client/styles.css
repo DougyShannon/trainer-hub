@@ -504,7 +504,7 @@ textarea { resize: vertical; font: inherit; }
 /* Damage: a red counter just under the HP printed at the card's top right. Sized from the card's width. */
 .gcard:has(.dmg-counter) { container-type: inline-size; }
 .dmg-counter {
-  position: absolute; z-index: 2; top: 10.5%; right: 4%; width: 27cqw; aspect-ratio: 1; display: grid; place-items: center;
+  position: absolute; z-index: 2; top: 11.5%; right: 4%; width: 27cqw; aspect-ratio: 1; display: grid; place-items: center;
   border-radius: 50%; background: #d3202f; color: #fff; border: max(1.5px, 1.6cqw) solid #fff;
   font: 800 max(10px, 11.5cqw)/1 var(--body); letter-spacing: -0.02em; box-shadow: 0 1px 4px rgb(0 0 0 / 45%);
 }
