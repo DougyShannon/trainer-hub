@@ -1,15 +1,45 @@
 // Rules engine for practice games against the computer. It enforces the core rules of the
 // Pokémon TCG: setup and mulligans, one Energy and one Supporter per turn, evolving, retreating,
 // attack costs, damage with Weakness and Resistance, Special Conditions, Knock Outs, prizes and
-// the ways to win. Common Trainer cards are automated in trainers.ts and trainers-more.ts; anything else is
-// played "by hand" with the moves in manual.ts.
+// the ways to win. Trainer cards are automated in trainers.ts, trainers-more.ts and trainers-extra.ts;
+// what Tools and Stadiums change while in play is in effects.ts, and Stadium uses and other card
+// actions in actions.ts.
 
 import { otherSeat, type Condition, type Seat } from "../game-types";
-import type { PAction, PCard, PPlayer, PSlot, PState, Prompt, SlotKey } from "./types";
+import type { Attack, PAction, PCard, PPlayer, PSlot, PState, Prompt, SlotKey } from "./types";
 import { ATTACK_RESUME, resolveAttack } from "./attacks";
-import { AUTOMATED_TOOLS, trainerFor, toolHpBonus } from "./trainers";
+import { trainerFor } from "./trainers";
 import { FIRST_TURN_SUPPORTERS } from "./trainers-more";
+import { FIRST_TURN_EXTRA } from "./trainers-extra";
 import { applyManual, MANUAL_RESUME } from "./manual";
+import {
+  EFFECT_RESUME,
+  isAutomatedTool,
+  attackBlock,
+  attackCost,
+  baseName,
+  beforeKnockOut,
+  benchLimit,
+  cleanse,
+  endOfTurn,
+  evolvesSameTurn,
+  ignoresSleep,
+  isFossil,
+  keepsConfusion,
+  knockOutTo,
+  maxHp,
+  onBenched,
+  onEnergyFromHand,
+  poisonExtra,
+  retreatBlock,
+  retreatCost,
+  specialEnergyOff,
+  toolOf,
+  trimBenches,
+} from "./effects";
+import { AUTOMATED_STADIUMS, actionEffect, runCardAction } from "./actions";
+
+export { attackCost, hpLeft, maxHp, retreatCost } from "./effects";
 
 export class RuleError extends Error {}
 export const fail = (message: string): never => {
@@ -44,18 +74,19 @@ export const flip = () => Math.random() < 0.5;
 export const ENERGY_TYPES = ["Grass", "Fire", "Water", "Lightning", "Psychic", "Fighting", "Darkness", "Metal", "Fairy", "Dragon"];
 
 /** The Energy units a card provides, e.g. ["Fire"] or ["Colorless", "Colorless"]. */
-export function energyProvides(c: PCard): string[] {
+export function energyProvides(c: PCard, state?: PState): string[] {
   if (isBasicEnergy(c)) {
     const type = ENERGY_TYPES.find((t) => c.name.includes(t));
     return [type ?? "Colorless"];
   }
+  if (specialEnergyOff(state)) return ["Colorless"];
   if (c.name === "Double Turbo Energy" || c.name === "Double Colorless Energy") return ["Colorless", "Colorless"];
   return ["Colorless"];
 }
 
 /** Whether these Energy cards can pay a cost like ["Fire", "Colorless"]. */
-export function canPay(cost: string[], energy: PCard[]) {
-  const units = energy.flatMap(energyProvides);
+export function canPay(cost: string[], energy: PCard[], state?: PState) {
+  const units = energy.flatMap((e) => energyProvides(e, state));
   const pool = [...units];
   for (const need of cost.filter((c) => c !== "Colorless" && c !== "Free")) {
     const i = pool.indexOf(need);
@@ -64,9 +95,6 @@ export function canPay(cost: string[], energy: PCard[]) {
   }
   return pool.length >= cost.filter((c) => c === "Colorless").length;
 }
-
-export const maxHp = (slot: PSlot) => (topCard(slot).hp ?? 0) + toolHpBonus(slot);
-export const hpLeft = (slot: PSlot) => maxHp(slot) - slot.damage;
 
 /** How many Prize cards the opponent takes when this Pokémon is Knocked Out. */
 export function prizeValue(c: PCard) {
@@ -99,6 +127,15 @@ export const newSlot = (card: PCard, turn: number): PSlot => ({
   cantAttackTurn: null,
   effects: {},
 });
+
+/** Puts a Pokémon (or a card played as one, like an Antique Fossil) onto a player's Bench. */
+export function benchPokemon(state: PState, seat: Seat, card: PCard, fromHand = false) {
+  if (isFossil(card) && !card.types.length) card.types = ["Colorless"];
+  const slot = newSlot(card, state.turn);
+  state.players[seat].bench.push(slot);
+  onBenched(state, seat, slot, fromHand);
+  return slot;
+}
 
 export function log(state: PState, seat: Seat | null, text: string, kind?: "turn" | "attack" | "ko" | "coin" | "system") {
   const n = (state.log[state.log.length - 1]?.n ?? 0) + 1;
@@ -147,6 +184,11 @@ export function newPracticeGame(p1: Side, p2: Side): PState {
     supporterPlayed: false,
     retreated: false,
     stadiumPlayed: false,
+    lost: [],
+    koTurn: -1,
+    koNames: [],
+    used: [],
+    vstarUsed: false,
   });
   const state: PState = {
     status: "setup",
@@ -162,6 +204,8 @@ export function newPracticeGame(p1: Side, p2: Side): PState {
     log: [],
     setupDone: { p1: false, p2: false },
     pendingEnd: false,
+    effects: [],
+    attacking: null,
   };
   for (const seat of ["p1", "p2"] as Seat[]) {
     const p = state.players[seat];
@@ -187,6 +231,20 @@ export function newPracticeGame(p1: Side, p2: Side): PState {
   return state;
 }
 
+/** Fills in anything a game saved before newer rules were added is missing. */
+export function normalize(state: PState) {
+  state.effects ??= [];
+  state.attacking ??= null;
+  for (const p of [state.players.p1, state.players.p2]) {
+    p.lost ??= [];
+    p.koTurn ??= -1;
+    p.koNames ??= [];
+    p.used ??= [];
+    p.vstarUsed ??= false;
+  }
+  return state;
+}
+
 function finishSetup(state: PState) {
   for (const seat of ["p1", "p2"] as Seat[]) {
     const p = state.players[seat];
@@ -206,6 +264,7 @@ function startTurn(state: PState) {
   p.supporterPlayed = false;
   p.retreated = false;
   p.stadiumPlayed = false;
+  p.used = [];
   log(state, state.current, `Turn ${state.turn}: ${p.name}'s turn.`, "turn");
   if (!draw(p, 1)) return win(state, otherSeat(state.current), `${p.name} couldn't draw a card at the start of their turn.`);
 }
@@ -221,14 +280,15 @@ export function win(state: PState, seat: Seat, reason: string) {
 
 // ----- What's allowed right now -----
 
-export const canEvolveNow = (state: PState, slot: PSlot) => state.turn > 2 && slot.playedTurn !== state.turn;
+export const canEvolveNow = (state: PState, slot: PSlot, card?: PCard) =>
+  state.turn > 2 && (slot.playedTurn !== state.turn || (!!card && slot.pokemon.length === 1 && evolvesSameTurn(state, slot, card)));
 
 export function evolveTargets(state: PState, seat: Seat, card: PCard): SlotKey[] {
   const p = state.players[seat];
   if (!isPokemon(card) || isBasicPokemon(card) || !card.evolvesFrom) return [];
   return slotKeys(p).filter((k) => {
     const s = slotAt(p, k)!;
-    return topCard(s).name === card.evolvesFrom && canEvolveNow(state, s);
+    return topCard(s).name === card.evolvesFrom && canEvolveNow(state, s, card);
   });
 }
 
@@ -237,27 +297,44 @@ export function cantAttackReason(state: PState, seat: Seat): string | null {
   const p = state.players[seat];
   if (state.turn === 1) return "The player who goes first can't attack on their first turn.";
   if (!p.active) return "You have no Active Pokémon.";
-  if (p.active.conditions.includes("asleep")) return "Your Active Pokémon is Asleep.";
-  if (p.active.conditions.includes("paralyzed")) return "Your Active Pokémon is Paralyzed.";
+  const windup = ignoresSleep(state, p.active);
+  if (p.active.conditions.includes("asleep") && !windup) return "Your Active Pokémon is Asleep.";
+  if (p.active.conditions.includes("paralyzed") && !windup) return "Your Active Pokémon is Paralyzed.";
   if (p.active.cantAttackTurn === state.turn) return "This Pokémon can't attack this turn.";
+  return attackBlock(state, seat);
+}
+
+/**
+ * The attacks a Pokémon has: its own, then any from its Tool (a Technical Machine, or the VSTAR
+ * Power on Earthen Seal Stone).
+ */
+export function attacksOf(state: PState, slot: PSlot): Attack[] {
+  const own = topCard(slot).attacks;
+  const tool = toolOf(state, slot);
+  if (!tool || !slot.tool) return own;
+  if (tool.startsWith("Technical Machine")) return [...own, ...slot.tool.attacks];
+  if (tool === "Earthen Seal Stone" && topCard(slot).subtypes.some((s) => s === "V" || s === "VSTAR" || s === "VMAX")) {
+    const owner = state.players.p1.active === slot || state.players.p1.bench.includes(slot) ? "p1" : "p2";
+    if (!state.players[owner].vstarUsed) return [...own, ...slot.tool.attacks];
+  }
+  return own;
+}
+
+/** Why an attack's own text stops it being used right now, or null. */
+export function attackRuleBlock(state: PState, seat: Seat, attack: Attack): string | null {
+  const m = attack.text?.match(/You can use this attack only (?:when|if) your opponent has exactly (\d+) Prize cards? remaining/i);
+  if (m && state.players[otherSeat(seat)].prizes.length !== Number(m[1]))
+    return `${attack.name} needs your opponent to have exactly ${m[1]} Prize card${m[1] === "1" ? "" : "s"} left.`;
   return null;
 }
 
 export function usableAttacks(state: PState, seat: Seat): number[] {
   const p = state.players[seat];
   if (cantAttackReason(state, seat) || !p.active) return [];
-  return topCard(p.active)
-    .attacks.map((a, i) => (canPay(attackCost(state, p.active!, a), p.active!.energy) ? i : -1))
+  return attacksOf(state, p.active)
+    .map((a, i) => (canPay(attackCost(state, p.active!, a), p.active!.energy, state) && !attackRuleBlock(state, seat, a) ? i : -1))
     .filter((i) => i >= 0);
 }
-
-export function retreatCost(slot: PSlot, turn = 0) {
-  return topCard(slot).retreat + (slot.effects.retreatTax === turn ? 1 : 0);
-}
-
-/** An attack's Energy cost, including any extra an opponent's attack added this turn. */
-export const attackCost = (state: PState, slot: PSlot, attack: { cost: string[] }) =>
-  slot.effects.attackTax === state.turn ? [...attack.cost, "Colorless"] : attack.cost;
 
 export function cantRetreatReason(state: PState, seat: Seat): string | null {
   const p = state.players[seat];
@@ -266,8 +343,10 @@ export function cantRetreatReason(state: PState, seat: Seat): string | null {
   if (p.retreated) return "You've already retreated this turn.";
   if (p.active.conditions.some((c) => c === "asleep" || c === "paralyzed")) return "Asleep or Paralyzed Pokémon can't retreat.";
   if (p.active.effects.cantRetreat === state.turn) return "An attack stops this Pokémon retreating this turn.";
-  const units = p.active.energy.flatMap(energyProvides).length;
-  if (units < retreatCost(p.active, state.turn)) return `Retreating costs ${plural(retreatCost(p.active, state.turn), "Energy")}.`;
+  const block = retreatBlock(state, seat, p.active);
+  if (block) return block;
+  const units = p.active.energy.flatMap((e) => energyProvides(e, state)).length;
+  if (units < retreatCost(state, p.active)) return `Retreating costs ${plural(retreatCost(state, p.active), "Energy")}.`;
   return null;
 }
 
@@ -277,8 +356,10 @@ export function cantPlayTrainerReason(state: PState, seat: Seat, card: PCard): s
   if (isTool(card)) return slotKeys(p).some((k) => !slotAt(p, k)!.tool) ? null : "All your Pokémon already have a Tool.";
   if (isSupporter(card)) {
     if (p.supporterPlayed) return "You've already played a Supporter this turn.";
-    if (state.turn === 1 && !FIRST_TURN_SUPPORTERS.includes(card.name)) return "The player who goes first can't play a Supporter on their first turn.";
+    if (state.turn === 1 && ![...FIRST_TURN_SUPPORTERS, ...FIRST_TURN_EXTRA].includes(baseName(card.name)))
+      return "The player who goes first can't play a Supporter on their first turn.";
   }
+  if (isFossil(card) && baseName(card.name) !== "Snorlax Doll") return p.bench.length >= benchLimit(state, seat) ? "Your Bench is full." : null;
   if (isStadium(card)) {
     if (p.stadiumPlayed) return "You've already played a Stadium this turn.";
     if (state.stadium?.card.name === card.name) return "That Stadium is already in play.";
@@ -287,9 +368,17 @@ export function cantPlayTrainerReason(state: PState, seat: Seat, card: PCard): s
   return effect?.canPlay?.(state, seat, card) ?? null;
 }
 
-/** Whether playing this card does what it says. Stadiums and most Tools don't do anything yet. */
-export const isAutomated = (card: PCard) =>
-  card.supertype !== "Trainer" || (isTool(card) ? AUTOMATED_TOOLS.includes(card.name) : !!trainerFor(card.name));
+/** Whether the game does what this card says for you. */
+export const isAutomated = (card: PCard) => {
+  if (card.supertype !== "Trainer") return true;
+  const name = baseName(card.name);
+  if (isTool(card)) return isAutomatedTool(name);
+  if (isStadium(card)) return AUTOMATED_STADIUMS.includes(name);
+  return isFossil(card) || !!trainerFor(card.name);
+};
+
+/** Cards that can start the game in play as Basic Pokémon (Snorlax Doll can too). */
+export const isSetupBasic = (c: PCard) => isBasicPokemon(c) || (c.supertype === "Trainer" && baseName(c.name) === "Snorlax Doll");
 
 // ----- Doing things -----
 
@@ -301,6 +390,7 @@ function mustBeYourTurn(state: PState, seat: Seat) {
 }
 
 export function applyPractice(state: PState, seat: Seat, action: PAction) {
+  normalize(state);
   const p = state.players[seat];
   const opp = state.players[otherSeat(seat)];
 
@@ -313,14 +403,19 @@ export function applyPractice(state: PState, seat: Seat, action: PAction) {
     case "setup": {
       if (state.status !== "setup" || state.setupDone[seat]) fail("Setup is already done.");
       const active = p.hand.find((c) => c.uid === action.active);
-      if (!active || !isBasicPokemon(active)) fail("Choose a Basic Pokémon for your Active Spot.");
+      if (!active || !isSetupBasic(active)) fail("Choose a Basic Pokémon for your Active Spot.");
       const bench = [...new Set(action.bench)].filter((u) => u !== action.active);
       if (bench.length > BENCH_SIZE) fail(`Your Bench holds ${BENCH_SIZE} Pokémon.`);
-      p.active = newSlot(takeFromHand(p, active!.uid), 0);
+      const place = (uid: string) => {
+        const c = takeFromHand(p, uid);
+        if (isFossil(c)) c.types = ["Colorless"];
+        return newSlot(c, 0);
+      };
+      p.active = place(active!.uid);
       for (const uid of bench) {
         const c = p.hand.find((x) => x.uid === uid);
-        if (!c || !isBasicPokemon(c)) fail("Only Basic Pokémon can go on your Bench.");
-        p.bench.push(newSlot(takeFromHand(p, uid), 0));
+        if (!c || !isSetupBasic(c)) fail("Only Basic Pokémon can go on your Bench.");
+        p.bench.push(place(uid));
       }
       state.setupDone[seat] = true;
       log(state, seat, `${p.name} is ready.`);
@@ -335,10 +430,10 @@ export function applyPractice(state: PState, seat: Seat, action: PAction) {
       mustBeYourTurn(state, seat);
       const card = p.hand.find((c) => c.uid === action.uid) ?? fail("That card isn't in your hand.");
       if (!isBasicPokemon(card)) fail("Only Basic Pokémon can be played onto the Bench.");
-      if (p.bench.length >= BENCH_SIZE) fail("Your Bench is full.");
-      p.bench.push(newSlot(takeFromHand(p, card.uid), state.turn));
+      if (p.bench.length >= benchLimit(state, seat)) fail("Your Bench is full.");
       log(state, seat, `${p.name} put ${card.name} on the Bench.`);
-      return;
+      benchPokemon(state, seat, takeFromHand(p, card.uid), true);
+      return settle(state);
     }
 
     case "evolve": {
@@ -363,7 +458,8 @@ export function applyPractice(state: PState, seat: Seat, action: PAction) {
       slot.energy.push(takeFromHand(p, card.uid));
       p.energyAttached = true;
       log(state, seat, `${p.name} attached ${card.name} to ${topCard(slot).name}.`);
-      return;
+      onEnergyFromHand(state, seat, slot);
+      return settle(state);
     }
 
     case "attachTool": {
@@ -374,7 +470,7 @@ export function applyPractice(state: PState, seat: Seat, action: PAction) {
       if (slot.tool) fail("That Pokémon already has a Tool.");
       slot.tool = takeFromHand(p, card.uid);
       log(state, seat, `${p.name} attached ${card.name} to ${topCard(slot).name}.`);
-      return;
+      return settle(state);
     }
 
     case "playTrainer": {
@@ -389,9 +485,17 @@ export function applyPractice(state: PState, seat: Seat, action: PAction) {
         state.stadium = { card, owner: seat };
         p.stadiumPlayed = true;
         log(state, seat, `${p.name} played the Stadium ${card.name}.`);
-        return;
+        return settle(state);
       }
-      if (isSupporter(card)) p.supporterPlayed = true;
+      if (isFossil(card)) {
+        log(state, seat, `${p.name} put ${card.name} onto the Bench as a Pokémon.`);
+        benchPokemon(state, seat, card, true);
+        return settle(state);
+      }
+      if (isSupporter(card)) {
+        p.supporterPlayed = true;
+        p.used.push(`supporter:${baseName(card.name)}`);
+      }
       p.discard.push(card);
       const effect = trainerFor(card.name);
       log(state, seat, `${p.name} played ${card.name}.`);
@@ -410,13 +514,13 @@ export function applyPractice(state: PState, seat: Seat, action: PAction) {
       const incoming = p.bench[action.bench] ?? fail("There's no Pokémon there.");
       const outgoing = p.active!;
       // Pay the cost with the Energy that's least useful to keep: special Energy first, then extras.
-      let toPay = retreatCost(outgoing, state.turn);
+      let toPay = retreatCost(state, outgoing);
       const order = [...outgoing.energy].sort((a, b) => Number(isBasicEnergy(a)) - Number(isBasicEnergy(b)));
       for (const e of order) {
         if (toPay <= 0) break;
         outgoing.energy.splice(outgoing.energy.indexOf(e), 1);
         p.discard.push(e);
-        toPay -= energyProvides(e).length;
+        toPay -= energyProvides(e, state).length;
       }
       outgoing.conditions = [];
       outgoing.cantAttackTurn = null;
@@ -433,9 +537,13 @@ export function applyPractice(state: PState, seat: Seat, action: PAction) {
       const reason = cantAttackReason(state, seat);
       if (reason) fail(reason);
       const attacker = p.active!;
-      const attack = topCard(attacker).attacks[action.index] ?? fail("That attack doesn't exist.");
-      if (!canPay(attackCost(state, attacker, attack), attacker.energy)) fail(`${attack.name} needs more Energy.`);
+      const attack = attacksOf(state, attacker)[action.index] ?? fail("That attack doesn't exist.");
+      if (!canPay(attackCost(state, attacker, attack), attacker.energy, state)) fail(`${attack.name} needs more Energy.`);
+      const ruleBlock = attackRuleBlock(state, seat, attack);
+      if (ruleBlock) fail(ruleBlock);
       if (!opp.active) fail("Your opponent has no Active Pokémon.");
+      state.attacking = seat;
+      if (action.index >= topCard(attacker).attacks.length && attacker.tool && baseName(attacker.tool.name) === "Earthen Seal Stone") p.vstarUsed = true;
       if (attacker.conditions.includes("confused")) {
         const heads = flip();
         log(state, seat, `${topCard(attacker).name} is Confused. Coin flip: ${heads ? "heads" : "tails"}.`, "coin");
@@ -448,6 +556,12 @@ export function applyPractice(state: PState, seat: Seat, action: PAction) {
       }
       resolveAttack(state, seat, attack);
       state.pendingEnd = true;
+      return settle(state);
+    }
+
+    case "special": {
+      mustBeYourTurn(state, seat);
+      runCardAction(state, seat, action.id);
       return settle(state);
     }
 
@@ -468,7 +582,7 @@ export function applyPractice(state: PState, seat: Seat, action: PAction) {
 export function evolveSlot(state: PState, slot: PSlot, card: PCard) {
   slot.pokemon.push(card);
   slot.playedTurn = state.turn;
-  slot.conditions = [];
+  slot.conditions = keepsConfusion(state) ? slot.conditions.filter((c) => c === "confused") : [];
   slot.cantAttackTurn = null;
   slot.effects = {};
 }
@@ -525,7 +639,13 @@ export function resolvePrompt(state: PState, seat: Seat, picks: string[]) {
     fail(prompt.min === prompt.max ? `Choose ${prompt.min}.` : `Choose between ${prompt.min} and ${prompt.max}.`);
   }
   state.prompt = null;
-  const resume = RESUME[prompt.effect] ?? ATTACK_RESUME[prompt.effect] ?? MANUAL_RESUME[prompt.effect] ?? trainerFor(prompt.effect)?.resume;
+  const resume =
+    RESUME[prompt.effect] ??
+    ATTACK_RESUME[prompt.effect] ??
+    EFFECT_RESUME[prompt.effect] ??
+    MANUAL_RESUME[prompt.effect] ??
+    trainerFor(prompt.effect)?.resume ??
+    actionEffect(prompt.effect)?.resume;
   if (!resume) fail("Unknown choice.");
   resume!(state, seat, unique, prompt.data ?? {});
   if (!state.prompt && state.queue.length) state.prompt = state.queue.shift()!;
@@ -543,7 +663,9 @@ export function ask(state: PState, prompt: Prompt) {
 /** Handles Knock Outs, then (if nothing is waiting on a choice) finishes the turn. */
 export function settle(state: PState) {
   if (state.status !== "playing") return;
+  cleanse(state);
   if (!state.prompt) checkKnockOuts(state);
+  if (state.status === "playing" && !state.prompt) trimBenches(state);
   if (state.status !== "playing" || state.prompt) return;
   if (state.pendingEnd) {
     state.pendingEnd = false;
@@ -557,17 +679,17 @@ function checkKnockOuts(state: PState) {
     const taker = otherSeat(seat);
     const slots = [...(p.active ? [p.active] : []), ...p.bench];
     for (const slot of slots) {
-      if (slot.damage < maxHp(slot)) continue;
+      if (slot.damage < maxHp(state, slot)) continue;
       const name = topCard(slot).name;
-      const prizes = prizeValue(topCard(slot));
-      discardSlot(p, slot);
+      log(state, seat, `${p.name}'s ${name} was Knocked Out!`, "ko");
+      const prizes = beforeKnockOut(state, seat, slot, prizeValue(topCard(slot)));
+      knockOutTo(state, p, slot);
       if (slot === p.active) p.active = null;
       else p.bench.splice(p.bench.indexOf(slot), 1);
-      log(state, seat, `${p.name}'s ${name} was Knocked Out!`, "ko");
       const t = state.players[taker];
       const taken = t.prizes.splice(0, prizes);
       t.hand.push(...taken);
-      log(state, taker, `${t.name} took ${plural(taken.length, "Prize card")}.`);
+      if (taken.length) log(state, taker, `${t.name} took ${plural(taken.length, "Prize card")}.`);
       if (!t.prizes.length) return win(state, taker, `${t.name} took their last Prize card.`);
     }
   }
@@ -590,6 +712,8 @@ function checkKnockOuts(state: PState) {
 
 function endTurn(state: PState) {
   const seat = state.current;
+  state.attacking = null;
+  endOfTurn(state);
   // Paralysis wears off at the end of its owner's turn.
   const mine = state.players[seat].active;
   if (mine) mine.conditions = mine.conditions.filter((c) => c !== "paralyzed");
@@ -617,7 +741,7 @@ function checkup(state: PState) {
     if (!slot) continue;
     const name = topCard(slot).name;
     if (slot.conditions.includes("poisoned")) {
-      const amount = slot.effects.poisonDamage ?? 10;
+      const amount = (slot.effects.poisonDamage ?? 10) + poisonExtra(state, slot);
       slot.damage += amount;
       log(state, seat, `${name} took ${amount} damage from Poison.`);
     }

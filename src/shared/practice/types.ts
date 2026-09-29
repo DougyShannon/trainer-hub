@@ -3,7 +3,12 @@
 
 import type { Condition, Seat } from "../game-types";
 
-export type Attack = { name: string; cost: string[]; damage: string; text: string };
+export type Attack = {
+  name: string;
+  cost: string[];
+  damage: string;
+  text: string;
+};
 
 /** Everything the rules need to know about one physical card in a practice game. */
 export type PCard = {
@@ -50,6 +55,8 @@ export type PSlot = {
     protect?: { turn: number; effects: boolean };
     guard?: { turn: number; amount: number };
     boost?: { turn: number; amount: number };
+    /** Acerola's Mischief: no damage or effects from Pokémon ex attacks during this turn. */
+    exProof?: number;
   };
 };
 
@@ -67,10 +74,34 @@ export type PPlayer = {
   supporterPlayed: boolean;
   retreated: boolean;
   stadiumPlayed: boolean;
+  /** Cards put in the Lost Zone. Older saved games may not have it (see normalize in engine.ts). */
+  lost: PCard[];
+  /** The turn one of this player's Pokémon was last Knocked Out, and which ones. */
+  koTurn: number;
+  koNames: string[];
+  /** Once-per-turn card actions used this turn, e.g. "stadium" or "grant". */
+  used: string[];
+  /** A VSTAR Power has been used this game. */
+  vstarUsed: boolean;
 };
 
 /** Where a choice's options come from. */
-export type PickZone = "deck" | "hand" | "discard" | "myBench" | "oppBench" | "myPokemon" | "oppPokemon";
+export type PickZone =
+  | "deck"
+  | "hand"
+  | "discard"
+  | "prizes"
+  | "lost"
+  | "oppHand"
+  | "oppDeck"
+  | "oppDiscard"
+  | "myBench"
+  | "oppBench"
+  | "myPokemon"
+  | "oppPokemon"
+  | "anyPokemon"
+  /** Plain choices written in `labels`, like "Yes" and "No". */
+  | "choice";
 
 /**
  * A choice the engine is waiting on, e.g. "Choose a Basic Pokémon to put onto your Bench".
@@ -85,12 +116,19 @@ export type Prompt = {
   shown?: string[];
   min: number;
   max: number;
+  /** Words for each option when the zone is "choice". */
+  labels?: Record<string, string>;
   /** Which effect asked, and anything it needs to carry on once the choice is made. */
   effect: string;
   data?: Record<string, unknown>;
 };
 
-export type PLog = { n: number; seat: Seat | null; text: string; kind?: "turn" | "attack" | "ko" | "coin" | "system" };
+export type PLog = {
+  n: number;
+  seat: Seat | null;
+  text: string;
+  kind?: "turn" | "attack" | "ko" | "coin" | "system";
+};
 
 export type PStatus = "setup" | "playing" | "finished";
 
@@ -111,6 +149,33 @@ export type PState = {
   setupDone: Record<Seat, boolean>;
   /** After an attack, the turn ends once any choices it caused (like promoting a Pokémon) are made. */
   pendingEnd: boolean;
+  /** Card effects that last for a turn, like Jasmine's Gaze or Black Belt's Training. */
+  effects: TurnEffect[];
+  /** The seat whose attack is being resolved, so Knock Outs can tell they came from an attack. */
+  attacking: Seat | null;
+};
+
+/**
+ * A card effect that lasts until the end of a turn. `turn` is the turn it applies in; `seat` is
+ * the player who played the card. Kept as plain data so saved games can be stored.
+ */
+export type TurnEffect = {
+  kind:
+    | "damageUp" // attacks by `seat`'s Pokémon do `amount` more (filtered by `type`, `vs`)
+    | "damageDown" // `seat`'s Pokémon take `amount` less (filtered by `type`, `vs`)
+    | "noAttack" // `seat`'s Pokémon can't attack
+    | "poisonNoRetreat" // the other player's Poisoned Pokémon can't retreat
+    | "morePrizes" // `seat` takes `amount` more Prize cards (see `vs`)
+    | "discardHandAt5" // Amarys: at the end of the turn, discard a hand of 5 or more
+    | "noAbilities"; // the other player's Active Pokémon has no Abilities
+  seat: Seat;
+  turn: number;
+  amount?: number;
+  /** Only Pokémon of this type. */
+  type?: string;
+  /** Only against (or from) these Pokémon: "ex", "exV", "V", "VSTAR", "Tera", "N" (N's Pokémon). */
+  vs?: string;
+  source: string;
 };
 
 export type SlotKey = "active" | `bench:${number}`;
@@ -129,4 +194,6 @@ export type PAction =
   | { type: "choose"; picks: string[] }
   | { type: "endTurn" }
   | { type: "byHand"; op: ManualOp; amount?: number }
+  /** A card action that isn't playing a card, like using a Stadium (see cardActions in effects.ts). */
+  | { type: "special"; id: string }
   | { type: "concede" };

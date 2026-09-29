@@ -3,8 +3,46 @@
 // is a line or two. Cards that aren't here or in trainers.ts are resolved "by hand" (manual.ts).
 
 import { otherSeat, type Seat } from "../game-types";
-import { ask, draw, energyProvides, flip, isBasicEnergy, isBasicPokemon, isEnergy, isItem, isPokemon, isStadium, isSupporter, isTool, log, plural, settle, shuffle, slotAt, slotKeys, switchActive, topCard, BENCH_SIZE } from "./engine";
-import { benchSlots, discardCost, gust, me, names, needsOtherCards, oppHasBench, payDiscard, pull, resumeGust, searchDeck, them, toBench, toHand, type TrainerEffect } from "./trainers";
+import {
+  ask,
+  draw,
+  energyProvides,
+  flip,
+  isBasicEnergy,
+  isBasicPokemon,
+  isEnergy,
+  isItem,
+  isPokemon,
+  isStadium,
+  isSupporter,
+  isTool,
+  log,
+  plural,
+  settle,
+  shuffle,
+  slotAt,
+  slotKeys,
+  switchActive,
+  topCard,
+} from "./engine";
+import { benchLimit, setCondition } from "./effects";
+import {
+  benchSlots,
+  discardCost,
+  gust,
+  me,
+  names,
+  needsOtherCards,
+  oppHasBench,
+  payDiscard,
+  pull,
+  resumeGust,
+  searchDeck,
+  them,
+  toBench,
+  toHand,
+  type TrainerEffect,
+} from "./trainers";
 import type { PCard, PPlayer, PSlot, PState, SlotKey } from "./types";
 
 type Data = Record<string, unknown>;
@@ -12,25 +50,28 @@ type Match = (c: PCard) => boolean;
 
 // ----- Card tests -----
 
-const hasRuleBox = (c: PCard) => isPokemon(c) && c.rules.length > 0;
-const isEvolution = (c: PCard) => isPokemon(c) && !isBasicPokemon(c);
-const isStage = (n: 1 | 2) => (c: PCard) => isPokemon(c) && c.subtypes.includes(`Stage ${n}`);
-const ofType = (type: string) => (c: PCard) => isPokemon(c) && c.types.includes(type);
-const basicEnergyOf = (type: string) => (c: PCard) => isBasicEnergy(c) && c.name.includes(type);
-const either = (...tests: Match[]) => (c: PCard) => tests.some((t) => t(c));
+export const hasRuleBox = (c: PCard) => isPokemon(c) && c.rules.length > 0;
+export const isEvolution = (c: PCard) => isPokemon(c) && !isBasicPokemon(c);
+export const isStageN = (n: 1 | 2) => (c: PCard) => isPokemon(c) && c.subtypes.includes(`Stage ${n}`);
+export const ofTypeP = (type: string) => (c: PCard) => isPokemon(c) && c.types.includes(type);
+export const basicEnergyOf = (type: string) => (c: PCard) => isBasicEnergy(c) && c.name.includes(type);
+export const either =
+  (...tests: Match[]) =>
+  (c: PCard) =>
+    tests.some((t) => t(c));
 
 // ----- Shapes -----
 
-const slots = (p: PPlayer) => slotKeys(p).map((k) => slotAt(p, k)!);
+export const slots = (p: PPlayer) => slotKeys(p).map((k) => slotAt(p, k)!);
 
-function heal(slot: PSlot, amount: number) {
+export function heal(slot: PSlot, amount: number) {
   const before = slot.damage;
   slot.damage = Math.max(0, slot.damage - amount);
   return before - slot.damage;
 }
 
 /** Plain "Draw N cards." */
-const drawCards = (n: number | ((state: PState, seat: Seat) => number)): TrainerEffect => ({
+export const drawCards = (n: number | ((state: PState, seat: Seat) => number)): TrainerEffect => ({
   play(state, seat) {
     const p = me(state, seat);
     const count = typeof n === "number" ? n : n(state, seat);
@@ -41,7 +82,7 @@ const drawCards = (n: number | ((state: PState, seat: Seat) => number)): Trainer
 });
 
 /** "Draw cards until you have N cards in your hand." */
-const drawUntil = (n: (state: PState, seat: Seat) => number): TrainerEffect => ({
+export const drawUntil = (n: (state: PState, seat: Seat) => number): TrainerEffect => ({
   play(state, seat) {
     const p = me(state, seat);
     const before = p.hand.length;
@@ -51,7 +92,7 @@ const drawUntil = (n: (state: PState, seat: Seat) => number): TrainerEffect => (
 });
 
 /** "Shuffle your hand into your deck. Then, draw N cards." */
-const shuffleDraw = (n: (state: PState, seat: Seat) => number): TrainerEffect => ({
+export const shuffleDraw = (n: (state: PState, seat: Seat) => number): TrainerEffect => ({
   play(state, seat) {
     const p = me(state, seat);
     const count = n(state, seat);
@@ -63,7 +104,7 @@ const shuffleDraw = (n: (state: PState, seat: Seat) => number): TrainerEffect =>
 });
 
 /** "Each player shuffles their hand into their deck", then each draws their own number. */
-function bothShuffleDraw(state: PState, seat: Seat, mine: number, theirs: number) {
+export function bothShuffleDraw(state: PState, seat: Seat, mine: number, theirs: number) {
   for (const s of [seat, otherSeat(seat)]) {
     const p = state.players[s];
     p.deck.push(...p.hand.splice(0));
@@ -74,7 +115,7 @@ function bothShuffleDraw(state: PState, seat: Seat, mine: number, theirs: number
 }
 
 /** "Search your deck for up to N ... and put them into your hand." `trim` enforces combos like "a Basic and a Stage 1". */
-const searchToHand = (title: string, match: Match, max: number, trim?: (cards: PCard[]) => PCard[]): TrainerEffect => ({
+export const searchToHand = (title: string, match: Match, max: number, trim?: (cards: PCard[]) => PCard[]): TrainerEffect => ({
   canPlay: (state, seat) => (me(state, seat).deck.length ? null : "Your deck is empty."),
   play: (state, seat, card) => searchDeck(state, seat, card, title, match, max, { card: card.name }),
   resume(state, seat, picks, data) {
@@ -88,11 +129,25 @@ const searchToHand = (title: string, match: Match, max: number, trim?: (cards: P
 });
 
 /** "Put up to N ... from your discard pile into your hand" (or shuffle them into your deck). */
-const recover = (title: string, match: Match, max: number, to: "hand" | "deck", after?: (state: PState, seat: Seat, count: number) => void): TrainerEffect => ({
+export const recover = (
+  title: string,
+  match: Match,
+  max: number,
+  to: "hand" | "deck",
+  after?: (state: PState, seat: Seat, count: number) => void,
+): TrainerEffect => ({
   canPlay: (state, seat) => (me(state, seat).discard.some(match) ? null : "There's nothing in your discard pile for this card."),
   play(state, seat, card) {
     const p = me(state, seat);
-    ask(state, { seat, title, zone: "discard", options: p.discard.filter(match).map((c) => c.uid), min: 1, max, effect: card.name });
+    ask(state, {
+      seat,
+      title,
+      zone: "discard",
+      options: p.discard.filter(match).map((c) => c.uid),
+      min: 1,
+      max,
+      effect: card.name,
+    });
   },
   resume(state, seat, picks) {
     const p = me(state, seat);
@@ -108,14 +163,21 @@ const recover = (title: string, match: Match, max: number, to: "hand" | "deck", 
 });
 
 /** "Look at the top N cards of your deck and put M of them into your hand", with what happens to the rest. */
-const topCards = (n: number, take: number, rest: "discard" | "bottom" | "shuffle", match: Match = () => true, exactly = false): TrainerEffect => ({
+export const topCards = (n: number, take: number, rest: "discard" | "bottom" | "shuffle", match: Match = () => true, exactly = false): TrainerEffect => ({
   canPlay: (state, seat) => (me(state, seat).deck.length ? null : "Your deck is empty."),
   play(state, seat, card) {
     const p = me(state, seat);
     const top = p.deck.slice(0, n);
     const options = top.filter(match).map((c) => c.uid);
     if (!options.length) {
-      finishTop(state, seat, card.name, top.map((c) => c.uid), [], rest);
+      finishTop(
+        state,
+        seat,
+        card.name,
+        top.map((c) => c.uid),
+        [],
+        rest,
+      );
       return;
     }
     const want = Math.min(take, options.length);
@@ -139,7 +201,10 @@ function finishTop(state: PState, seat: Seat, cardName: string, top: string[], p
   const p = me(state, seat);
   const taken = pull(p.deck, picks);
   p.hand.push(...taken);
-  const others = pull(p.deck, top.filter((u) => !picks.includes(u)));
+  const others = pull(
+    p.deck,
+    top.filter((u) => !picks.includes(u)),
+  );
   if (rest === "discard") p.discard.push(...others);
   else if (rest === "bottom") p.deck.push(...shuffle(others));
   else {
@@ -151,7 +216,7 @@ function finishTop(state: PState, seat: Seat, cardName: string, top: string[], p
 }
 
 /** "Heal N damage from 1 of your Pokémon." */
-const healOne = (amount: number, which: Match = () => true, extra?: (state: PState, seat: Seat, slot: PSlot) => void): TrainerEffect => ({
+export const healOne = (amount: number, which: Match = () => true, extra?: (state: PState, seat: Seat, slot: PSlot) => void): TrainerEffect => ({
   canPlay: (state, seat) => (slots(me(state, seat)).some((s) => s.damage && which(topCard(s))) ? null : "None of your Pokémon that this can heal have damage."),
   play(state, seat, card) {
     const p = me(state, seat);
@@ -174,7 +239,7 @@ const healOne = (amount: number, which: Match = () => true, extra?: (state: PSta
 });
 
 /** "Heal N damage from your Active Pokémon." */
-const healActive = (amount: number, ok: (slot: PSlot) => boolean = () => true): TrainerEffect => ({
+export const healActive = (amount: number, ok: (slot: PSlot) => boolean = () => true): TrainerEffect => ({
   canPlay: (state, seat) => {
     const a = me(state, seat).active;
     return a && a.damage && ok(a) ? null : "Your Active Pokémon can't be healed by this card.";
@@ -187,7 +252,7 @@ const healActive = (amount: number, ok: (slot: PSlot) => boolean = () => true): 
 });
 
 /** "Heal N damage from each of your Pokémon." */
-const healEach = (amount: number, which: Match = () => true, both = false): TrainerEffect => ({
+export const healEach = (amount: number, which: Match = () => true, both = false): TrainerEffect => ({
   play(state, seat) {
     for (const s of both ? [seat, otherSeat(seat)] : [seat]) for (const slot of slots(state.players[s])) if (which(topCard(slot))) heal(slot, amount);
     log(state, seat, `${both ? "Every" : `Each of ${me(state, seat).name}'s`} Pokémon was healed ${amount} damage.`);
@@ -195,7 +260,7 @@ const healEach = (amount: number, which: Match = () => true, both = false): Trai
 });
 
 /** Ask for one of your Benched Pokémon, then switch it in. */
-function askSwitch(state: PState, seat: Seat, effect: string, data: Data = {}) {
+export function askSwitch(state: PState, seat: Seat, effect: string, data: Data = {}) {
   ask(state, {
     seat,
     title: "Choose a Benched Pokémon to switch with your Active Pokémon",
@@ -207,7 +272,7 @@ function askSwitch(state: PState, seat: Seat, effect: string, data: Data = {}) {
     data,
   });
 }
-function doSwitch(state: PState, seat: Seat, picks: string[]) {
+export function doSwitch(state: PState, seat: Seat, picks: string[]) {
   const p = me(state, seat);
   const index = Number(picks[0].split(":")[1]);
   const outgoing = p.active;
@@ -216,7 +281,7 @@ function doSwitch(state: PState, seat: Seat, picks: string[]) {
   log(state, seat, `${p.name} switched ${name} into the Active Spot.`);
   return outgoing;
 }
-const needBench = (state: PState, seat: Seat) => (me(state, seat).bench.length ? null : "You have no Benched Pokémon.");
+export const needBench = (state: PState, seat: Seat) => (me(state, seat).bench.length ? null : "You have no Benched Pokémon.");
 
 /** Puts a Pokémon in play back into its owner's hand (with its attached cards, or discarding them). */
 function pickUp(state: PState, seat: Seat, key: SlotKey, attached: "hand" | "discard") {
@@ -231,7 +296,7 @@ function pickUp(state: PState, seat: Seat, key: SlotKey, attached: "hand" | "dis
   log(state, seat, `${p.name} put ${topCard(slot).name} back into their hand.`);
   // An empty Active Spot is filled from the Bench when the game settles, the same as after a Knock Out.
 }
-const pickUpCard = (which: Match, attached: "hand" | "discard"): TrainerEffect => ({
+export const pickUpCard = (which: Match, attached: "hand" | "discard"): TrainerEffect => ({
   canPlay: (state, seat) => {
     const p = me(state, seat);
     const ok = slotKeys(p).filter((k) => which(topCard(slotAt(p, k)!)));
@@ -254,7 +319,7 @@ const pickUpCard = (which: Match, attached: "hand" | "discard"): TrainerEffect =
 });
 
 /** Attach a Basic Energy from your discard pile to one of your (Benched) Pokémon. */
-const attachFromDiscard = (energy: Match, target: Match, benchOnly: boolean): TrainerEffect => ({
+export const attachFromDiscard = (energy: Match, target: Match, benchOnly: boolean): TrainerEffect => ({
   canPlay: (state, seat) => {
     const p = me(state, seat);
     if (!p.discard.some(energy)) return "There's no matching Energy in your discard pile.";
@@ -263,13 +328,31 @@ const attachFromDiscard = (energy: Match, target: Match, benchOnly: boolean): Tr
   },
   play(state, seat, card) {
     const p = me(state, seat);
-    ask(state, { seat, title: "Choose an Energy card from your discard pile", zone: "discard", options: p.discard.filter(energy).map((c) => c.uid), min: 1, max: 1, effect: card.name, data: { step: "energy", card: card.name } });
+    ask(state, {
+      seat,
+      title: "Choose an Energy card from your discard pile",
+      zone: "discard",
+      options: p.discard.filter(energy).map((c) => c.uid),
+      min: 1,
+      max: 1,
+      effect: card.name,
+      data: { step: "energy", card: card.name },
+    });
   },
   resume(state, seat, picks, data) {
     const p = me(state, seat);
     if (data.step === "energy") {
       const keys = ((benchOnly ? benchSlots(p) : slotKeys(p)) as SlotKey[]).filter((k) => target(topCard(slotAt(p, k)!)));
-      ask(state, { seat, title: "Choose a Pokémon to attach it to", zone: "myPokemon", options: keys, min: 1, max: 1, effect: String(data.card), data: { step: "target", energy: picks[0] } });
+      ask(state, {
+        seat,
+        title: "Choose a Pokémon to attach it to",
+        zone: "myPokemon",
+        options: keys,
+        min: 1,
+        max: 1,
+        effect: String(data.card),
+        data: { step: "target", energy: picks[0] },
+      });
       return;
     }
     const slot = slotAt(p, picks[0] as SlotKey)!;
@@ -279,8 +362,8 @@ const attachFromDiscard = (energy: Match, target: Match, benchOnly: boolean): Tr
   },
 });
 
-const prizesLeft = (state: PState, seat: Seat) => them(state, seat).prizes.length;
-const wentSecondFirstTurn = (state: PState, seat: Seat) => state.turn === 2 && state.first !== seat;
+export const prizesLeft = (state: PState, seat: Seat) => them(state, seat).prizes.length;
+export const wentSecondFirstTurn = (state: PState, seat: Seat) => state.turn === 2 && state.first !== seat;
 
 // Built on first use: this module and engine.ts import each other, so nothing from the engine
 // may be touched while the modules are still loading.
@@ -372,7 +455,16 @@ const build = (): Record<string, TrainerEffect> => ({
       drawCards(2).play(state, seat, card);
       const p = me(state, seat);
       const options = p.discard.filter(isBasicEnergy).map((c) => c.uid);
-      if (options.length) ask(state, { seat, title: "Choose a Basic Energy from your discard pile to put into your hand", zone: "discard", options, min: 1, max: 1, effect: card.name });
+      if (options.length)
+        ask(state, {
+          seat,
+          title: "Choose a Basic Energy from your discard pile to put into your hand",
+          zone: "discard",
+          options,
+          min: 1,
+          max: 1,
+          effect: card.name,
+        });
     },
     resume(state, seat, picks) {
       const p = me(state, seat);
@@ -384,11 +476,11 @@ const build = (): Record<string, TrainerEffect> => ({
 
   // ----- Supporters and Items: search -----
   "Master Ball": searchToHand("Choose a Pokémon to put into your hand", isPokemon, 1),
-  "Hyper Aroma": searchToHand("Choose up to 3 Stage 1 Pokémon", isStage(1), 3),
+  "Hyper Aroma": searchToHand("Choose up to 3 Stage 1 Pokémon", isStageN(1), 3),
   Jacq: searchToHand("Choose up to 2 Evolution Pokémon", isEvolution, 2),
   Arezu: searchToHand("Choose up to 3 Evolution Pokémon without a Rule Box", (c) => isEvolution(c) && !hasRuleBox(c), 3),
   Cyrano: searchToHand("Choose up to 3 Pokémon ex", (c) => isPokemon(c) && c.subtypes.includes("ex"), 3),
-  Lance: searchToHand("Choose up to 3 Dragon Pokémon", ofType("Dragon"), 3),
+  Lance: searchToHand("Choose up to 3 Dragon Pokémon", ofTypeP("Dragon"), 3),
   Clavell: searchToHand("Choose up to 3 Basic Pokémon with 120 HP or less", (c) => isBasicPokemon(c) && (c.hp ?? 0) <= 120, 3),
   Lady: searchToHand("Choose up to 4 Basic Energy cards", isBasicEnergy, 4),
   Firebreather: searchToHand("Choose up to 7 Basic Fire Energy cards", basicEnergyOf("Fire"), 7),
@@ -397,19 +489,32 @@ const build = (): Record<string, TrainerEffect> => ({
   "Feather Ball": searchToHand("Choose a Pokémon with no Retreat Cost", (c) => isPokemon(c) && c.retreat === 0, 1),
   "Treasure Tracker": searchToHand("Choose up to 5 Pokémon Tool cards", isTool, 5),
   "Mega Signal": searchToHand("Choose a Mega Evolution Pokémon ex", (c) => isPokemon(c) && c.subtypes.includes("MEGA"), 1),
-  "Fighting Gong": searchToHand("Choose a Basic Fighting Energy or a Basic Fighting Pokémon", either(basicEnergyOf("Fighting"), (c) => isBasicPokemon(c) && c.types.includes("Fighting")), 1),
+  "Fighting Gong": searchToHand(
+    "Choose a Basic Fighting Energy or a Basic Fighting Pokémon",
+    either(basicEnergyOf("Fighting"), (c) => isBasicPokemon(c) && c.types.includes("Fighting")),
+    1,
+  ),
   "Brock's Scouting": searchToHand("Choose up to 2 Basic Pokémon, or 1 Evolution Pokémon", isPokemon, 2, (cards) => {
     const evo = cards.find(isEvolution);
     return evo ? [evo] : cards.filter(isBasicPokemon).slice(0, 2);
   }),
-  Dawn: searchToHand("Choose a Basic, a Stage 1 and a Stage 2 Pokémon", either(isBasicPokemon, isStage(1), isStage(2)), 3, (cards) => [
+  Dawn: searchToHand("Choose a Basic, a Stage 1 and a Stage 2 Pokémon", either(isBasicPokemon, isStageN(1), isStageN(2)), 3, (cards) => [
     ...cards.filter(isBasicPokemon).slice(0, 1),
-    ...cards.filter(isStage(1)).slice(0, 1),
-    ...cards.filter(isStage(2)).slice(0, 1),
+    ...cards.filter(isStageN(1)).slice(0, 1),
+    ...cards.filter(isStageN(2)).slice(0, 1),
   ]),
-  Hilda: searchToHand("Choose an Evolution Pokémon and an Energy card", either(isEvolution, isEnergy), 2, (cards) => [...cards.filter(isEvolution).slice(0, 1), ...cards.filter(isEnergy).slice(0, 1)]),
-  "Colress's Tenacity": searchToHand("Choose a Stadium card and an Energy card", either(isStadium, isEnergy), 2, (cards) => [...cards.filter(isStadium).slice(0, 1), ...cards.filter(isEnergy).slice(0, 1)]),
-  Irida: searchToHand("Choose a Water Pokémon and an Item card", either(ofType("Water"), isItem), 2, (cards) => [...cards.filter(ofType("Water")).slice(0, 1), ...cards.filter(isItem).slice(0, 1)]),
+  Hilda: searchToHand("Choose an Evolution Pokémon and an Energy card", either(isEvolution, isEnergy), 2, (cards) => [
+    ...cards.filter(isEvolution).slice(0, 1),
+    ...cards.filter(isEnergy).slice(0, 1),
+  ]),
+  "Colress's Tenacity": searchToHand("Choose a Stadium card and an Energy card", either(isStadium, isEnergy), 2, (cards) => [
+    ...cards.filter(isStadium).slice(0, 1),
+    ...cards.filter(isEnergy).slice(0, 1),
+  ]),
+  Irida: searchToHand("Choose a Water Pokémon and an Item card", either(ofTypeP("Water"), isItem), 2, (cards) => [
+    ...cards.filter(ofTypeP("Water")).slice(0, 1),
+    ...cards.filter(isItem).slice(0, 1),
+  ]),
   "Energy Search Pro": searchToHand("Choose Basic Energy cards of different types", isBasicEnergy, 10, (cards) => {
     const seen = new Set<string>();
     return cards.filter((c) => {
@@ -424,12 +529,20 @@ const build = (): Record<string, TrainerEffect> => ({
     canPlay: (state, seat) => (me(state, seat).hand.length === 1 ? null : "You can use this only when it's the last card in your hand."),
   },
   "Precious Trolley": {
-    canPlay: (state, seat) => (me(state, seat).bench.length >= BENCH_SIZE ? "Your Bench is full." : null),
-    play: (state, seat, card) => searchDeck(state, seat, card, "Choose any number of Basic Pokémon to put onto your Bench", isBasicPokemon, BENCH_SIZE - me(state, seat).bench.length),
+    canPlay: (state, seat) => (me(state, seat).bench.length >= benchLimit(state, seat) ? "Your Bench is full." : null),
+    play: (state, seat, card) =>
+      searchDeck(
+        state,
+        seat,
+        card,
+        "Choose any number of Basic Pokémon to put onto your Bench",
+        isBasicPokemon,
+        benchLimit(state, seat) - me(state, seat).bench.length,
+      ),
     resume: (state, seat, picks) => toBench(state, seat, { name: "Precious Trolley" } as PCard, picks),
   },
   "Furisode Girl": {
-    canPlay: (state, seat) => (me(state, seat).bench.length >= BENCH_SIZE ? "Your Bench is full." : null),
+    canPlay: (state, seat) => (me(state, seat).bench.length >= benchLimit(state, seat) ? "Your Bench is full." : null),
     play: (state, seat, card) => searchDeck(state, seat, card, "Choose a Basic Pokémon to put onto your Bench", isBasicPokemon, 1),
     resume: (state, seat, picks) => toBench(state, seat, { name: "Furisode Girl" } as PCard, picks),
   },
@@ -453,8 +566,13 @@ const build = (): Record<string, TrainerEffect> => ({
   // ----- The discard pile -----
   "Max Rod": recover("Choose up to 5 Pokémon and Basic Energy cards", either(isPokemon, isBasicEnergy), 5, "hand"),
   "Miracle Headset": recover("Choose up to 2 Supporter cards", isSupporter, 2, "hand"),
-  "Lana's Aid": recover("Choose up to 3 Pokémon without a Rule Box and Basic Energy cards", either((c) => isPokemon(c) && !hasRuleBox(c), isBasicEnergy), 3, "hand"),
-  Tulip: recover("Choose up to 4 Psychic Pokémon and Basic Psychic Energy cards", either(ofType("Psychic"), basicEnergyOf("Psychic")), 4, "hand"),
+  "Lana's Aid": recover(
+    "Choose up to 3 Pokémon without a Rule Box and Basic Energy cards",
+    either((c) => isPokemon(c) && !hasRuleBox(c), isBasicEnergy),
+    3,
+    "hand",
+  ),
+  Tulip: recover("Choose up to 4 Psychic Pokémon and Basic Psychic Energy cards", either(ofTypeP("Psychic"), basicEnergyOf("Psychic")), 4, "hand"),
   "Energy Recycler": recover("Choose up to 5 Basic Energy cards to shuffle into your deck", isBasicEnergy, 5, "deck"),
   "Sacred Ash": recover("Choose up to 5 Pokémon to shuffle into your deck", isPokemon, 5, "deck"),
   "Pal Pad": recover("Choose up to 2 Supporter cards to shuffle into your deck", isSupporter, 2, "deck"),
@@ -462,8 +580,8 @@ const build = (): Record<string, TrainerEffect> => ({
     if (count) drawCards(3).play(state, seat, {} as PCard);
   }),
   "Marnie's Pride": attachFromDiscard(isBasicEnergy, () => true, true),
-  "Dark Patch": attachFromDiscard(basicEnergyOf("Darkness"), ofType("Darkness"), true),
-  "Wondrous Patch": attachFromDiscard(basicEnergyOf("Psychic"), ofType("Psychic"), true),
+  "Dark Patch": attachFromDiscard(basicEnergyOf("Darkness"), ofTypeP("Darkness"), true),
+  "Wondrous Patch": attachFromDiscard(basicEnergyOf("Psychic"), ofTypeP("Psychic"), true),
 
   // ----- Healing -----
   Cook: healActive(70),
@@ -491,7 +609,8 @@ const build = (): Record<string, TrainerEffect> => ({
     }
   }),
   "Bianca's Devotion": {
-    canPlay: (state, seat) => (slots(me(state, seat)).some((s) => s.damage && (topCard(s).hp ?? 0) - s.damage <= 30) ? null : "None of your Pokémon have 30 HP or less left."),
+    canPlay: (state, seat) =>
+      slots(me(state, seat)).some((s) => s.damage && (topCard(s).hp ?? 0) - s.damage <= 30) ? null : "None of your Pokémon have 30 HP or less left.",
     play(state, seat, card) {
       const p = me(state, seat);
       ask(state, {
@@ -559,7 +678,7 @@ const build = (): Record<string, TrainerEffect> => ({
     resume(state, seat, picks) {
       resumeGust(state, seat, picks);
       const a = them(state, seat).active;
-      if (a && !a.conditions.includes("confused")) a.conditions.push("confused");
+      if (a) setCondition(state, a, "confused");
     },
   },
 
@@ -576,12 +695,30 @@ const build = (): Record<string, TrainerEffect> => ({
     },
     play(state, seat, card) {
       const p = me(state, seat);
-      ask(state, { seat, title: "Choose the Pokémon to move a Basic Energy from", zone: "myPokemon", options: slotKeys(p).filter((k) => slotAt(p, k)!.energy.some(isBasicEnergy)), min: 1, max: 1, effect: card.name, data: { step: "from" } });
+      ask(state, {
+        seat,
+        title: "Choose the Pokémon to move a Basic Energy from",
+        zone: "myPokemon",
+        options: slotKeys(p).filter((k) => slotAt(p, k)!.energy.some(isBasicEnergy)),
+        min: 1,
+        max: 1,
+        effect: card.name,
+        data: { step: "from" },
+      });
     },
     resume(state, seat, picks, data) {
       const p = me(state, seat);
       if (data.step === "from") {
-        ask(state, { seat, title: "Choose the Pokémon to move it to", zone: "myPokemon", options: slotKeys(p).filter((k) => k !== picks[0]), min: 1, max: 1, effect: "Energy Switch", data: { step: "to", from: picks[0] } });
+        ask(state, {
+          seat,
+          title: "Choose the Pokémon to move it to",
+          zone: "myPokemon",
+          options: slotKeys(p).filter((k) => k !== picks[0]),
+          min: 1,
+          max: 1,
+          effect: "Energy Switch",
+          data: { step: "to", from: picks[0] },
+        });
         return;
       }
       const from = slotAt(p, data.from as SlotKey)!;
@@ -599,7 +736,15 @@ const build = (): Record<string, TrainerEffect> => ({
       log(state, seat, `Coin flip for Crushing Hammer: ${heads ? "heads" : "tails"}.`, "coin");
       if (!heads) return;
       const opp = them(state, seat);
-      ask(state, { seat, title: `Choose 1 of ${opp.name}'s Pokémon to discard an Energy from`, zone: "oppPokemon", options: slotKeys(opp).filter((k) => slotAt(opp, k)!.energy.length), min: 1, max: 1, effect: card.name });
+      ask(state, {
+        seat,
+        title: `Choose 1 of ${opp.name}'s Pokémon to discard an Energy from`,
+        zone: "oppPokemon",
+        options: slotKeys(opp).filter((k) => slotAt(opp, k)!.energy.length),
+        min: 1,
+        max: 1,
+        effect: card.name,
+      });
     },
     resume(state, seat, picks) {
       const opp = them(state, seat);
@@ -617,7 +762,7 @@ const build = (): Record<string, TrainerEffect> => ({
     canPlay: (state, seat) => (them(state, seat).active ? null : "Your opponent has no Active Pokémon."),
     play(state, seat) {
       const a = them(state, seat).active!;
-      for (const c of ["burned", "confused"] as const) if (!a.conditions.includes(c)) a.conditions.push(c);
+      for (const c of ["burned", "confused"] as const) setCondition(state, a, c);
       log(state, seat, `${topCard(a).name} is now Burned and Confused.`);
     },
   },
