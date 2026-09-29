@@ -4,7 +4,8 @@ import type { CardRef } from "../../shared/game-types";
 // Game cards are small on the table, so hovering one with a mouse shows it full size beside
 // the pointer. Phones and tablets have no hover; tapping a card opens the details panel instead.
 
-type Zoom = { card: CardRef; rect: DOMRect } | null;
+type Damage = { taken: number; hp: number | null };
+type Zoom = { card: CardRef; rect: DOMRect; damage?: Damage } | null;
 
 let zoom: Zoom = null;
 const listeners = new Set<() => void>();
@@ -25,11 +26,11 @@ export const blockZoom = (on: boolean) => {
 };
 
 /** Pointer handlers to spread onto anything showing a face-up card. */
-export function zoomHandlers(card: CardRef | null) {
+export function zoomHandlers(card: CardRef | null, damage?: Damage) {
   if (!card?.image) return {};
   return {
     onPointerEnter: (e: PointerEvent<HTMLElement>) => {
-      if (e.pointerType === "mouse" && !blocked) set({ card, rect: e.currentTarget.getBoundingClientRect() });
+      if (e.pointerType === "mouse" && !blocked) set({ card, rect: e.currentTarget.getBoundingClientRect(), damage });
     },
     onPointerLeave: () => set(null),
   };
@@ -76,6 +77,13 @@ export function CardZoom() {
   return (
     <div className="card-zoom" style={{ left, top, width: WIDTH, height: HEIGHT }} aria-hidden="true">
       <img src={src} alt="" onError={() => setBroken(src)} />
+      {z.damage && (
+        <span className={`zoom-dmg${z.damage.hp !== null && z.damage.taken >= z.damage.hp ? " ko" : ""}`}>
+          <span className="zoom-dmg-num">{z.damage.taken}</span>
+          <span className="zoom-dmg-label">damage</span>
+        </span>
+      )}
+      {z.damage && z.damage.hp !== null && <span className="zoom-hp-left">{Math.max(0, z.damage.hp - z.damage.taken)} HP left</span>}
     </div>
   );
 }

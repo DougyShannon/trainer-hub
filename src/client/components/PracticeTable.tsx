@@ -26,6 +26,7 @@ import {
 } from "../../shared/practice/engine";
 import type { PAction, PCard, PPlayer, PSlot, PState, SlotKey } from "../../shared/practice/types";
 import { sprite } from "../lib/sprites";
+import { ByHandPanel, type ByHandFor } from "./ByHand";
 import { CardSummary, CardText, useCardDetail } from "./CardFacts";
 import { CardPreview, GameCard } from "./GameTable";
 import { CardZoom } from "./CardZoom";
@@ -55,6 +56,9 @@ const ref = (c: PCard): CardRef => ({
   image: c.image,
   imageLarge: c.imageLarge,
 });
+
+/** A card's own words, without the reminder about how many of its kind you can play. */
+const cardText = (card: PCard) => card.rules.filter((r) => !/^You may play (only 1|as many|any number)/i.test(r) && !/^ACE SPEC:/i.test(r));
 
 const where = (key: SlotKey) => (key === "active" ? "Active" : `Bench ${Number(key.split(":")[1]) + 1}`);
 
@@ -101,10 +105,9 @@ function PracticeSlot({
       data-drop={drop}
       aria-label={`${label}: ${top.name}, ${Math.max(0, hp - slot.damage)} of ${hp} HP left`}
     >
-      <GameCard card={ref(top)} />
+      <GameCard card={ref(top)} damage={{ taken: slot.damage, hp }} />
       <EnergyTuck energy={slot.energy} />
       {ready && <ReadyTag attacks={ready} />}
-      {slot.damage > 0 && <span className={`dmg${slot.damage >= hp ? " ko" : ""}`}>{slot.damage}</span>}
       {slot.pokemon.length > 1 && <span className="stack-count">×{slot.pokemon.length}</span>}
       {slot.conditions.length > 0 && (
         <span className="conds">
@@ -233,12 +236,14 @@ function PokemonInfo({
   slotKey,
   mine,
   act,
+  byHand,
 }: {
   state: PState;
   seat: Seat;
   slotKey: SlotKey;
   mine: boolean;
   act: (a: PAction) => void;
+  byHand: (about: ByHandFor) => void;
 }) {
   const p = state.players[seat];
   const slot = slotAt(p, slotKey);
@@ -272,7 +277,13 @@ function PokemonInfo({
             {a.type}: {a.name}
           </strong>
           <span className="small">{a.text}</span>
-          <span className="small muted">Abilities aren't automated in practice games yet.</span>
+          {mine && myTurn ? (
+            <button type="button" className="secondary-btn small" onClick={() => byHand({ card: top, text: [`${a.name}: ${a.text}`], why: "The game doesn't use Abilities for you. Do what it says with these moves." })}>
+              Use {a.name} by hand
+            </button>
+          ) : (
+            <span className="small muted">The game doesn't use Abilities for you: its owner does what it says with the By hand moves.</span>
+          )}
         </div>
       ))}
       {top.attacks.map((a, i) => {
@@ -333,7 +344,7 @@ function PokemonInfo({
 function HandCardActions({ state, me, card, act }: { state: PState; me: Seat; card: PCard; act: (a: PAction) => void }) {
   const p = state.players[me];
   const myTurn = state.status === "playing" && state.current === me && !state.prompt && !state.pendingEnd;
-  const rules = card.supertype !== "Pokémon" ? card.rules.filter((r) => !/^You may play (only 1|as many)/i.test(r)) : [];
+  const rules = card.supertype !== "Pokémon" ? cardText(card) : [];
   let controls: ReactNode = null;
 
   if (!myTurn) {
@@ -404,7 +415,13 @@ function HandCardActions({ state, me, card, act }: { state: PState; me: Seat; ca
         </p>
       ))}
       {card.supertype === "Trainer" && !isAutomated(card) && (
-        <p className="small practice-warn">This card's effect isn't automated in practice games yet, so playing it does nothing.</p>
+        <p className="small practice-hand">
+          {isStadium(card)
+            ? "The game doesn't do this Stadium's effect for you. When it lets you do something, press By hand at the top of the table and do what it says."
+            : isTool(card)
+              ? "The game doesn't do this Tool's effect for you. When it matters, press By hand at the top of the table and do what it says."
+              : "You do this card's effect yourself: after you play it, the By hand moves open so you can do what it says."}
+        </p>
       )}
       <div className="action-buttons">{controls}</div>
     </>
@@ -466,17 +483,21 @@ function practiceHow(card: PCard): string {
 }
 
 /** Every option in a practice turn, with whether you can do it right now and which buttons to press. */
-function practiceGuide(state: PState, me: Seat, open: (key: SlotKey) => void): GuideRow[] {
+function practiceGuide(state: PState, me: Seat, open: (key: SlotKey) => void, byHand: () => void): GuideRow[] {
   const p = state.players[me];
   const hand = p.hand;
   const openActive = { label: "Show my Active Pokémon", run: () => open("active") };
   const basics = hand.filter(isBasicPokemon);
   const evolvable = hand.filter((c) => isPokemon(c) && !isBasicPokemon(c) && evolveTargets(state, me, c).length > 0);
   const items = hand.filter((c) => (isItem(c) || isTool(c)) && !cantPlayTrainerReason(state, me, c));
-  const supporter = hand.find(isSupporter);
+  const supporters = hand.filter((c) => isSupporter(c) && !cantPlayTrainerReason(state, me, c));
+  const supporter = supporters[0] ?? hand.find(isSupporter);
   const supporterBlock = supporter ? cantPlayTrainerReason(state, me, supporter) : "No Supporter in your hand.";
-  const stadium = hand.find(isStadium);
+  const stadiums = hand.filter((c) => isStadium(c) && !cantPlayTrainerReason(state, me, c));
+  const stadium = stadiums[0] ?? hand.find(isStadium);
   const stadiumBlock = stadium ? cantPlayTrainerReason(state, me, stadium) : "No Stadium in your hand.";
+  const energy = p.energyAttached ? [] : hand.filter(isEnergy);
+  const uids = (cards: PCard[]) => cards.map((c) => c.uid);
   const retreatBlock = cantRetreatReason(state, me);
   const attackBlock = cantAttackReason(state, me);
   const canAttack = !attackBlock && usableAttacks(state, me).length > 0;
@@ -487,6 +508,7 @@ function practiceGuide(state: PState, me: Seat, open: (key: SlotKey) => void): G
       how: "Tap a Basic Pokémon in your hand, then press Put on your Bench.",
       state: p.bench.length >= BENCH_SIZE ? "blocked" : basics.length ? "ready" : "blocked",
       note: p.bench.length >= BENCH_SIZE ? "Your Bench is full." : basics.length ? `You have ${basics.map((c) => c.name).join(", ")}.` : "No Basic Pokémon in your hand.",
+      cards: p.bench.length >= BENCH_SIZE ? [] : uids(basics),
     },
     {
       what: "Evolve a Pokémon",
@@ -497,30 +519,35 @@ function practiceGuide(state: PState, me: Seat, open: (key: SlotKey) => void): G
         : state.turn <= 2
           ? "Nobody can evolve on their first turn."
           : "Nothing in your hand can evolve a Pokémon you have in play right now.",
+      cards: uids(evolvable),
     },
     {
       what: "Attach 1 Energy",
       how: "Tap an Energy card in your hand, then press Attach to… for the Pokémon you want.",
       state: p.energyAttached ? "done" : hand.some(isEnergy) ? "ready" : "blocked",
       note: p.energyAttached ? "Once per turn, and you've done it." : hand.some(isEnergy) ? "Once per turn." : "No Energy in your hand.",
+      cards: uids(energy),
     },
     {
       what: "Play Items and Tools",
       how: "Tap the card in your hand, then press Play (Tools: Attach to…).",
       state: items.length ? "ready" : "blocked",
       note: items.length ? "As many as you like." : "None you can play right now.",
+      cards: uids(items),
     },
     {
       what: "Play 1 Supporter",
       how: "Tap the Supporter in your hand, then press Play.",
       state: p.supporterPlayed ? "done" : supporterBlock ? "blocked" : "ready",
       note: p.supporterPlayed ? "Once per turn, and you've done it." : supporterBlock ?? "Once per turn.",
+      cards: p.supporterPlayed ? [] : uids(supporters),
     },
     {
       what: "Play a Stadium",
       how: "Tap the Stadium in your hand, then press Play.",
       state: p.stadiumPlayed ? "done" : stadiumBlock ? "blocked" : "ready",
       note: p.stadiumPlayed ? "Once per turn, and you've done it." : stadiumBlock,
+      cards: p.stadiumPlayed ? [] : uids(stadiums),
     },
     {
       what: "Retreat",
@@ -535,6 +562,12 @@ function practiceGuide(state: PState, me: Seat, open: (key: SlotKey) => void): G
       state: canAttack ? "ready" : "blocked",
       note: attackBlock ?? (canAttack ? null : "Attach more Energy first: each attack shows the Energy it needs."),
       show: openActive,
+    },
+    {
+      what: "Do what a card says, by hand",
+      how: "For Abilities, Stadiums and card text the game doesn't do for you: press By hand at the top of the table, then draw, search, heal, switch and so on.",
+      state: "ready",
+      show: { label: "Open the By hand moves", run: byHand },
     },
     { what: "End your turn", how: "Press End turn at the top of the table if you don't want to attack.", state: "info" },
   ];
@@ -661,6 +694,21 @@ export function PracticeTable({
   const [setupPick, setSetupPick] = useState<{ active: string | null; bench: string[] }>({ active: null, bench: [] });
   const [pile, setPile] = useState<{ title: string; cards: PCard[] } | null>(null);
   const [confirmConcede, setConfirmConcede] = useState(false);
+  // The turn guide option whose cards are raised in your hand.
+  const [raise, setRaise] = useState<{ what: string; cards: string[] } | null>(null);
+  const [byHand, setByHand] = useState<ByHandFor | "closed">("closed");
+
+  // Playing a card the game can't resolve opens the By hand moves with the card's text.
+  const play = (a: PAction) => {
+    if (a.type === "playTrainer") {
+      const card = mine.hand.find((c) => c.uid === a.uid);
+      if (card && !isAutomated(card) && !isStadium(card) && !cantPlayTrainerReason(state, me, card)) {
+        setByHand({ card, text: cardText(card), why: "The game doesn't do this card's effect for you. Do what it says with these moves, then press Done." });
+      }
+    }
+    setRaise(null);
+    act(a);
+  };
 
   // Drag a card from your hand onto a Pokémon (Energy, Tools, Evolutions), an empty Bench spot
   // (Basic Pokémon) or anywhere on the mat (Items, Supporters, Stadiums).
@@ -683,11 +731,11 @@ export function PracticeTable({
     onDrop: (card, dropped) => {
       setSel(null);
       const target = playsAnywhere(card) ? "board" : dropped;
-      if (target === "bench-empty") act({ type: "playBasic", uid: card.uid });
-      else if (target === "board") act({ type: "playTrainer", uid: card.uid });
-      else if (isEnergy(card)) act({ type: "attachEnergy", uid: card.uid, slot: target as SlotKey });
-      else if (isTool(card)) act({ type: "attachTool", uid: card.uid, slot: target as SlotKey });
-      else act({ type: "evolve", uid: card.uid, slot: target as SlotKey });
+      if (target === "bench-empty") play({ type: "playBasic", uid: card.uid });
+      else if (target === "board") play({ type: "playTrainer", uid: card.uid });
+      else if (isEnergy(card)) play({ type: "attachEnergy", uid: card.uid, slot: target as SlotKey });
+      else if (isTool(card)) play({ type: "attachTool", uid: card.uid, slot: target as SlotKey });
+      else play({ type: "evolve", uid: card.uid, slot: target as SlotKey });
     },
   });
   const logList = useRef<HTMLOListElement>(null);
@@ -707,6 +755,15 @@ export function PracticeTable({
       return s;
     });
   }, [lastLog, mine.hand, state.players]);
+
+  useEffect(() => {
+    if (!myTurn) setByHand("closed");
+  }, [myTurn]);
+  // Raised cards drop back once anything happens or the turn passes.
+  useEffect(() => setRaise(null), [lastLog, canAct]);
+  useEffect(() => {
+    if (raise) document.querySelector(".my-hand .hand-card.raised")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [raise]);
 
   useEffect(() => {
     if (!error) return;
@@ -755,6 +812,11 @@ export function PracticeTable({
         {thinking && <span className="turn-pill thinking">{theirs.name} is thinking…</span>}
         <span className="bar-spacer" />
         {state.status === "playing" && (
+          <button type="button" className="secondary-btn small" disabled={!canAct} onClick={() => setByHand(null)} title="Do what a card says when the game doesn't do it for you">
+            By hand
+          </button>
+        )}
+        {state.status === "playing" && (
           <button type="button" className="primary-btn small" disabled={!canAct} onClick={() => act({ type: "endTurn" })}>
             End turn
           </button>
@@ -796,7 +858,20 @@ export function PracticeTable({
         <div className={`board${drag.dragging ? " dragging" : ""}${drag.dropState("board") ? ` drop-${drag.dropState("board")}` : ""}`} data-drop={canAct ? "board" : undefined}>
           <div className="stadium-rail">
             <div className="stadium">
-              {state.stadium ? <GameCard card={ref(state.stadium.card)} size="sm" /> : <span className="gcard sm empty" />}
+              {state.stadium ? (
+                <GameCard
+                  card={ref(state.stadium.card)}
+                  size="sm"
+                  label={`Stadium: ${state.stadium.card.name}`}
+                  onClick={
+                    canAct
+                      ? () => setByHand({ card: state.stadium!.card, text: cardText(state.stadium!.card), why: "The game doesn't do Stadium effects for you. If this one lets you do something, do it with these moves." })
+                      : undefined
+                  }
+                />
+              ) : (
+                <span className="gcard sm empty" />
+              )}
               <span className="pile-label">Stadium</span>
             </div>
           </div>
@@ -823,14 +898,14 @@ export function PracticeTable({
             dropState={canAct ? drag.dropState : undefined}
           />
           </div>
-          <div className="my-hand" aria-label="Your hand">
+          <div className={`my-hand${raise ? " raising" : ""}`} aria-label="Your hand">
             {mine.hand.length ? (
               mine.hand.map((c) => {
                 const role = setupPick.active === c.uid ? "Active" : setupPick.bench.includes(c.uid) ? "Bench" : null;
                 return (
                   <div
                     key={c.uid}
-                    className={`hand-card${settingUp && !isBasicPokemon(c) ? " dim" : ""}${drag.dragging?.uid === c.uid ? " lifted" : ""}`}
+                    className={`hand-card${settingUp && !isBasicPokemon(c) ? " dim" : ""}${drag.dragging?.uid === c.uid ? " lifted" : ""}${raise ? (raise.cards.includes(c.uid) ? " raised" : " sunk") : ""}`}
                     {...(canAct ? drag.source(c, { name: c.name, image: c.image }) : {})}
                   >
                     <GameCard
@@ -850,7 +925,7 @@ export function PracticeTable({
 
         <aside className="table-side">
           {selected ? (
-            <PracticePanel card={selected} title={selected.name} close={() => setSel(null)} how={canAct ? practiceHow(selected) : null} controls={<HandCardActions state={state} me={me} card={selected} act={act} />} />
+            <PracticePanel card={selected} title={selected.name} close={() => setSel(null)} how={canAct ? practiceHow(selected) : null} controls={<HandCardActions state={state} me={me} card={selected} act={play} />} />
           ) : sel?.kind === "slot" && selectedSlot ? (
             <PracticePanel
               card={topCard(selectedSlot)}
@@ -868,7 +943,7 @@ export function PracticeTable({
                     : "Press Retreat your Active and send this in to swap it into the Active Spot (it costs your Active's Retreat cost)."
                   : null
               }
-              body={<PokemonInfo key={`${sel.side}${sel.key}`} state={state} seat={sel.side} slotKey={sel.key} mine={sel.side === me} act={act} />}
+              body={<PokemonInfo key={`${sel.side}${sel.key}`} state={state} seat={sel.side} slotKey={sel.key} mine={sel.side === me} act={act} byHand={setByHand} />}
             />
           ) : (
             <div className="action-panel idle">
@@ -892,7 +967,9 @@ export function PracticeTable({
           {canAct && (
             <TurnGuide
               title="Your turn: what you can do"
-              rows={practiceGuide(state, me, (key) => setSel({ kind: "slot", side: me, key }))}
+              rows={practiceGuide(state, me, (key) => setSel({ kind: "slot", side: me, key }), () => setByHand(null))}
+              picked={raise?.what}
+              onPick={(row) => setRaise(row ? { what: row.what, cards: row.cards ?? [] } : null)}
             />
           )}
           <section className="game-log" aria-label="Game log">
@@ -918,6 +995,9 @@ export function PracticeTable({
       {drag.ghost}
 
       {state.prompt?.seat === me && state.status !== "finished" && <ChoiceModal state={state} me={me} act={act} />}
+
+      {/* Hidden while one of its moves waits on a choice, then back for the next move. */}
+      {byHand !== "closed" && canAct && <ByHandPanel state={state} me={me} act={act} about={byHand} close={() => setByHand("closed")} />}
 
       {pile && (
         <div className="modal-backdrop" onClick={() => setPile(null)}>
