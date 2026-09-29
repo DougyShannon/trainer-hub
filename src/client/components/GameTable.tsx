@@ -27,6 +27,7 @@ import { TurnGuide, type GuideRow } from "./TurnGuide";
 import { BoardButton, HalfMat, MatPile, backdropProps } from "./Mat";
 import { MATS, matById, matFor, type Mat } from "../boards/library";
 import { useBoardPrefs } from "../boards/prefs";
+import { newestTurnFirst } from "../lib/log";
 
 type Pile = "hand" | "discard" | "lostZone" | "deck" | "attached" | "stadium" | "evolution";
 
@@ -1196,18 +1197,11 @@ function GameLog({ view, act, canChat }: { view: GameView; act: (a: GameAction) 
   const last = view.log[view.log.length - 1]?.n;
   useEffect(() => {
     const el = list.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el) el.scrollTop = 0;
   }, [last]);
   return (
     <section className="game-log" aria-label="Game log and chat">
       <h2 className="small">Game log</h2>
-      <ol ref={list}>
-        {view.log.map((l) => (
-          <li key={l.n} className={`log-${l.kind ?? "move"}${l.seat === view.you && l.seat ? " mine" : ""}`}>
-            {l.text}
-          </li>
-        ))}
-      </ol>
       {canChat && (
         <form
           onSubmit={(e) => {
@@ -1226,6 +1220,13 @@ function GameLog({ view, act, canChat }: { view: GameView; act: (a: GameAction) 
           </button>
         </form>
       )}
+      <ol ref={list}>
+        {newestTurnFirst(view.log).map((l) => (
+          <li key={l.n} className={`log-${l.kind ?? "move"}${l.seat === view.you && l.seat ? " mine" : ""}`}>
+            {l.text}
+          </li>
+        ))}
+      </ol>
     </section>
   );
 }
