@@ -1,9 +1,9 @@
 /**
  * The game board library: play mats for the "Two half mats" layout and backgrounds for the full board.
  *
- * To add your own, upload the picture to public/art/mats (a half mat) or public/art/boards (a full board
- * background), then copy one of the entries below and change its details. The step-by-step guide is
- * "adding-game-boards.md", and the Mat maker page (/play/mats) lines the card spots up for you.
+ * Players add their own half mats on the "Add a board" page (/play/mats): the picture and card spots
+ * are saved on the site and loaded into MATS by loadUploadedBoards. Mats that ship with the site are
+ * listed below (pictures in public/art/mats); full board backgrounds are in public/art/boards.
  */
 
 /** The centre of a card spot, as [% across the mat from the left, % down the mat from the top]. */
@@ -71,6 +71,8 @@ export type Mat = {
   layout?: MatLayout;
   /** Pokémon types this mat suits. Practice opponents from a Gym of that type use it. */
   types?: string[];
+  /** Uploaded by a player on the "Add a board" page: who uploaded it, and whether this viewer can remove it. */
+  uploaded?: { by: string; mine: boolean };
 };
 
 /** A picture behind the whole board in the "Full board" layout. The site places the cards itself. */
@@ -118,4 +120,40 @@ export function matFor(type: string | null | undefined, not?: string): Mat {
     MATS.find((m) => m.id !== not) ||
     MATS[0]
   );
+}
+
+// ----- Mats players uploaded -----
+
+/** Ids of uploaded mats start with this, so a saved choice can be kept before they've loaded. */
+export const UPLOADED_PREFIX = "u-";
+const BUILT_IN = MATS.length;
+
+type UploadedRow = { id: string; name: string; aspect: number; layout: MatLayout | null; image: string; thumb: string; by: string; mine: boolean };
+
+/**
+ * Fetches the mats players uploaded and adds them to MATS (after the site's own). Tells the page the
+ * board choices changed, so pickers and tables showing a player's mat draw again.
+ */
+export async function loadUploadedBoards() {
+  try {
+    const res = await fetch("/api/boards");
+    if (!res.ok) return;
+    const rows = (await res.json()) as UploadedRow[];
+    MATS.splice(
+      BUILT_IN,
+      MATS.length - BUILT_IN,
+      ...rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        image: r.image,
+        thumb: r.thumb,
+        aspect: r.aspect,
+        layout: r.layout ?? undefined,
+        uploaded: { by: r.by, mine: r.mine },
+      })),
+    );
+    window.dispatchEvent(new Event("trainer-hub:board"));
+  } catch {
+    // Offline or the site is busy: the site's own mats still work.
+  }
 }

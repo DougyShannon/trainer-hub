@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BACKDROPS, DEFAULT_MAT, MATS } from "./library";
+import { BACKDROPS, DEFAULT_MAT, MATS, UPLOADED_PREFIX } from "./library";
 
 /** "full" is the one big board; "mats" is two half mats, theirs upside down at the top and yours below. */
 export type BoardLayout = "full" | "mats";
@@ -22,7 +22,8 @@ export function getBoardPrefs(): BoardPrefs {
     const saved = JSON.parse(localStorage.getItem(KEY) ?? "{}") as Partial<BoardPrefs>;
     return {
       layout: saved.layout === "mats" ? "mats" : "full",
-      mat: MATS.some((m) => m.id === saved.mat) ? saved.mat! : DEFAULTS.mat,
+      // An uploaded mat may not have loaded yet, so keep its id.
+      mat: MATS.some((m) => m.id === saved.mat) || saved.mat?.startsWith(UPLOADED_PREFIX) ? saved.mat! : DEFAULTS.mat,
       backdrop: BACKDROPS.some((b) => b.id === saved.backdrop) ? saved.backdrop! : "",
     };
   } catch {

@@ -30,6 +30,10 @@ import { TeamViewPage } from "./pages/TeamViewPage";
 import { AuthProvider } from "./lib/auth";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./styles.css";
+import { loadUploadedBoards } from "./boards/library";
+
+// Players' own play mats (from the "Add a board" page).
+void loadUploadedBoards();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

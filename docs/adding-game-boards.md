@@ -9,6 +9,21 @@ Players pick either kind with the **Board** button at the top right of a game ta
 
 ---
 
+## Adding a half mat (no GitHub needed)
+
+Anyone with an account can do this on the site:
+
+1. Log in, go to **Play**, and click **Add a board** (under Your board).
+2. **Choose a picture…** and pick the mat picture from your computer or phone (see Part 1 for what makes a good one).
+3. Drag each box (Active, Bench 1 to 5, Prize 1 to 6, Deck, Discard and so on) onto the matching spot printed on the mat. Use **Card size** if the boxes are bigger or smaller than the printed spots.
+4. Type a name and press **Upload**.
+
+That's it: the mat is now in everyone's list under **Two half mats**. Press **Use it as my mat** to switch to it straight away. Whoever uploaded a mat (and Professor_D) can take it off the site again with **Remove** under "Boards players have added".
+
+The rest of this guide is only for **full board backgrounds**, which still go in through GitHub.
+
+---
+
 ## Part 1: Get the picture ready
 
 1. Use a picture that is **wider than it is tall**. For a half mat, the Active spot should be at the top and the Bench along the bottom (like the mats you sent).
@@ -16,46 +31,32 @@ Players pick either kind with the **Board** button at the top right of a game ta
 3. Aim for about **1400 pixels wide** and under **500 KB**. A `.jpg` or `.webp` is best; `.png` works but is bigger.
 4. Give it a short file name with **only lower case letters, numbers and dashes**, for example `pikachu-sunset.jpg`.
 
-## Part 2 (half mats only): Line up the card spots
-
-1. Go to **https://trainer-hub.blackhive.workers.dev/play/mats** (the Play page's **Your board** box has an **Add a board** link to it).
-2. Press **Choose a picture…** and pick your picture from your computer. It only loads in your browser; nothing is uploaded yet.
-3. Blue boxes appear on the mat. **Drag each box onto the matching spot printed on the mat**: Active, Stadium, Deck, Discard, Bench 1 to 5 and Prize 1 to 6. **Lost Zone** can go in any empty space, and **Name** (the player's name tag) is best over the logo.
-   - If the boxes are too big or small for the printed spots, move the **Card size** slider first.
-   - If your mat looks like the ones you sent, the boxes may already be in the right place. Then you don't need to move anything.
-4. In step 3 on that page, type the **Name** players will see, and check the **File name** matches your picture's file name.
-5. Press **Copy the line**. Paste it somewhere safe (a note or email to yourself) for Part 4.
-
-## Part 3: Upload the picture to GitHub
+## Part 2: Upload the picture to GitHub
 
 1. Go to **https://github.com/DougyShannon/trainer-hub** and sign in.
-2. Click the **public** folder, then **art**, then:
-   - **mats** for a half mat, or
-   - **boards** for a full board background.
+2. Click the **public** folder, then **art**, then **boards**.
 3. Top right, click **Add file**, then **Upload files**.
 4. Drag your picture into the box (or click **choose your files**).
-5. At the bottom, choose **Create a new branch for this commit and start a pull request**. Name the branch something like `add-pikachu-mat`.
+5. At the bottom, choose **Create a new branch for this commit and start a pull request**. Name the branch something like `add-pikachu-board`.
 6. Click **Propose changes**. On the next page, click **Create pull request**. Don't merge it yet.
 
-## Part 4: Add it to the library list
+## Part 3: Add it to the library list
 
-1. Still on GitHub, click **Code** (top left), then change the branch drop-down (it says **main**) to your new branch, for example `add-pikachu-mat`.
+1. Still on GitHub, click **Code** (top left), then change the branch drop-down (it says **main**) to your new branch, for example `add-pikachu-board`.
 2. Open **src**, then **client**, then **boards**, then **library.ts**.
 3. Click the **pencil** icon (top right of the file) to edit it.
-4. Find the right line:
-   - **Half mat**: find `// Add new half mats here`. Click at the **start of that line** and paste the line you copied in Part 2, then press **Enter**.
-   - **Full board background**: find `// Add new full board backgrounds here`. Click at the start of that line and type a line like this one, then press **Enter**:
-     ```
-       { id: "pikachu-sunset", name: "Pikachu sunset", image: "/art/boards/pikachu-sunset.jpg" },
-     ```
-     Change the three parts in quotes: the **id** (lower case and dashes, not used by any other board), the **name** players see, and the **file name** at the end of image.
+4. Find `// Add new full board backgrounds here`. Click at the start of that line and type a line like this one, then press **Enter**:
+   ```
+     { id: "pikachu-sunset", name: "Pikachu sunset", image: "/art/boards/pikachu-sunset.jpg" },
+   ```
+   Change the three parts in quotes: the **id** (lower case and dashes, not used by any other board), the **name** players see, and the **file name** at the end of image.
 5. Check your new line looks like the lines above it: it starts with `{`, ends with `},`, and every name is inside `"double quotes"`.
-6. Click **Commit changes…**, make sure **Commit directly to the add-pikachu-mat branch** is picked, and click **Commit changes**.
+6. Click **Commit changes…**, make sure **Commit directly to the add-pikachu-board branch** is picked, and click **Commit changes**.
 
-## Part 5: Put it live
+## Part 4: Put it live
 
 1. Go to the **Pull requests** tab and open your pull request.
-2. Wait for the checks at the bottom to finish. A **green tick** means the site still builds. A **red cross** usually means a typing slip in the line from Part 4: open library.ts on your branch again, fix it (compare with the lines above it), and commit again.
+2. Wait for the checks at the bottom to finish. A **green tick** means the site still builds. A **red cross** usually means a typing slip in the line from Part 3: open library.ts on your branch again, fix it (compare with the lines above it), and commit again.
 3. When it's green, click **Merge pull request**, then **Confirm merge**.
 4. The site updates by itself in a few minutes. Open a game, press **Board**, and your new board is in the list.
 
@@ -63,9 +64,8 @@ Players pick either kind with the **Board** button at the top right of a game ta
 
 ### If something looks wrong
 
-- **Cards sit off the printed spots**: open the Add a board page again, line the boxes up, copy the new line, and replace your old line in library.ts with it (the same way as Part 4).
-- **The mat looks squashed**: the `aspect` number in the line should be the picture's width divided by its height. The Add a board page works it out for you when you choose the picture.
-- **You're stuck**: upload the picture (Part 3) and ask Claude in the project to add it. Claude can line up the spots for you.
+- **Cards sit off an uploaded mat's printed spots**: remove it on the Add a board page, then upload it again with the boxes lined up better.
+- **You're stuck**: send the picture to Claude in the project and ask for it to be added.
 
 ### Handy to know
 
