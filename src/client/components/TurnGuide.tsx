@@ -1,8 +1,8 @@
 import { useState } from "react";
 
-// "What can I do now?" for the game tables: every option in a turn, whether you can do it right
-// now, and exactly which buttons to press to do it. Tap an option to raise the cards in your hand
-// that do it (or to open your Active Pokémon, for attacking and retreating).
+// "What can I do now?" for the game tables: every option in a turn and whether you can do it right
+// now. Tap an option's name to read how; tap its green "Can do" to raise the cards in your hand that
+// do it (or to open your Active Pokémon, for attacking and retreating).
 
 export type GuideRow = {
   what: string;
@@ -32,6 +32,8 @@ export function TurnGuide({
   onPick?: (row: GuideRow | null) => void;
 }) {
   const [open, setOpen] = useState(true);
+  // Rows start as just their header; tap a header to read how to do it.
+  const [expanded, setExpanded] = useState<string | null>(null);
   return (
     <section className="turn-guide" aria-label={title}>
       <button type="button" className="turn-guide-head" aria-expanded={open} onClick={() => setOpen(!open)}>
@@ -46,30 +48,43 @@ export function TurnGuide({
               const raises = r.state === "ready" && !!r.cards?.length && !!onPick;
               const shows = r.state === "ready" && !!r.show && !raises;
               const on = raises && picked === r.what;
-              const body = (
-                <>
-                  <div className="guide-top">
-                    <strong>{r.what}</strong>
-                    {MARK[r.state] && <span className={`guide-mark m-${r.state}`}>{MARK[r.state]}</span>}
-                  </div>
-                  <span className="small">{r.how}</span>
-                  {r.note && <span className="small muted">{r.note}</span>}
-                  {raises && (
-                    <span className="guide-tap small">
-                      {on ? "Showing these cards in your hand. Tap again to put them back." : `Tap to show ${r.cards!.length === 1 ? "the card" : `the ${r.cards!.length} cards`} in your hand`}
-                    </span>
-                  )}
-                  {shows && <span className="guide-tap small">Tap to {r.show!.label.toLowerCase()}</span>}
-                </>
-              );
+              const isOpen = expanded === r.what;
+              const mark = MARK[r.state];
               return (
-                <li key={r.what} className={`guide-row g-${r.state}${raises || shows ? " tappable" : ""}${on ? " picked" : ""}`}>
-                  {raises || shows ? (
-                    <button type="button" className="guide-btn" aria-pressed={raises ? on : undefined} onClick={() => (raises ? onPick!(on ? null : r) : r.show!.run())}>
-                      {body}
+                <li key={r.what} className={`guide-row g-${r.state}${on ? " picked" : ""}${isOpen ? " open" : ""}`}>
+                  <div className="guide-top">
+                    <button type="button" className="guide-name" aria-expanded={isOpen} onClick={() => setExpanded(isOpen ? null : r.what)}>
+                      <span className="guide-caret" aria-hidden="true">
+                        {isOpen ? "▾" : "▸"}
+                      </span>
+                      <strong>{r.what}</strong>
                     </button>
-                  ) : (
-                    body
+                    {mark &&
+                      (raises || shows ? (
+                        <button
+                          type="button"
+                          className={`guide-mark m-${r.state} tap`}
+                          aria-pressed={raises ? on : undefined}
+                          title={raises ? (on ? "Put the cards back" : "Show the cards in your hand") : r.show!.label}
+                          onClick={() => (raises ? onPick!(on ? null : r) : r.show!.run())}
+                        >
+                          {on ? "Showing" : mark}
+                        </button>
+                      ) : (
+                        <span className={`guide-mark m-${r.state}`}>{mark}</span>
+                      ))}
+                  </div>
+                  {isOpen && (
+                    <div className="guide-more">
+                      <span className="small">{r.how}</span>
+                      {r.note && <span className="small muted">{r.note}</span>}
+                      {raises && (
+                        <span className="small muted">
+                          Tap "Can do" to raise {r.cards!.length === 1 ? "the card" : `the ${r.cards!.length} cards`} in your hand.
+                        </span>
+                      )}
+                      {shows && <span className="small muted">Tap "Can do" to {r.show!.label.toLowerCase()}.</span>}
+                    </div>
                   )}
                 </li>
               );

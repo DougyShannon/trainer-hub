@@ -991,6 +991,14 @@ textarea { resize: vertical; font: inherit; }
 .guide-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 14px; }
 .guide-mark { flex: none; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 1px 8px; background: var(--surface-2); color: var(--muted); }
 .guide-mark.m-ready { background: var(--ok-soft); color: var(--ok); }
+.guide-row .guide-top { align-items: center; }
+.guide-name { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; background: none; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.guide-caret { color: var(--muted); font-size: 12px; width: 10px; }
+button.guide-mark { border: 0; font-family: inherit; }
+.guide-mark.tap { cursor: pointer; padding: 4px 12px; font-size: 12px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ok) 40%, transparent); }
+.guide-mark.tap:hover { background: var(--ok); color: #fff; }
+.guide-row.picked .guide-mark.tap { background: var(--gold); color: #1a1a1a; box-shadow: none; }
+.guide-more { display: grid; gap: 3px; padding: 4px 0 2px 16px; }
 .guide-show { justify-self: start; padding: 0; font-size: 13px; }
 @media (max-width: 640px) { .wrr.compact { grid-template-columns: repeat(3, 1fr); } }
 
@@ -1020,6 +1028,11 @@ textarea { resize: vertical; font: inherit; }
 .my-hand.raising .hand-card.raised .gcard { outline: 3px solid var(--gold); outline-offset: 2px; box-shadow: 0 0 16px color-mix(in srgb, var(--gold) 70%, transparent); }
 .my-hand.raising .hand-card.sunk { transform: translateY(calc(var(--cw) * 0.72)); opacity: 0.5; }
 .my-hand.raising .hand-card.sunk:hover { transform: translateY(calc(var(--cw) * 0.72 - 4px)); }
+/* Practice and live tables: whole cards while the hand sits under the board; once it's pinned to the
+   bottom of the screen (you've scrolled up) it slides down to show just the top half. */
+.my-hand.whole { height: calc(var(--cw) * 1.4 + 18px); transition: transform 0.15s, height 0.15s; }
+.my-hand.whole.stuck:not(.raising) { transform: translateY(calc(var(--cw) * 0.7 + 8px)); }
+.hand-end { grid-column: 1 / -1; height: 1px; }
 
 .guide-row.tappable { padding: 0; }
 .guide-btn {

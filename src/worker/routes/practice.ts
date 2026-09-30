@@ -20,7 +20,7 @@ type Details = {
 export type PracticeCard = Omit<PCard, "uid">;
 
 /** Loads everything the practice rules need for a deck list, as [card, count] pairs. */
-async function loadDeck(db: D1Database, entries: DeckEntry[]) {
+export async function loadDeck(db: D1Database, entries: DeckEntry[]) {
   const ids = [...new Set(entries.map(([id]) => id))];
   const rows = new Map<string, Record<string, unknown>>();
   for (let i = 0; i < ids.length; i += 90) {

@@ -37,6 +37,7 @@ import { CardZoom } from "./CardZoom";
 import { useCardDrag } from "./DragDrop";
 import { EnergyTuck, ReadyTag } from "./EnergyTuck";
 import { TurnGuide, type GuideRow } from "./TurnGuide";
+import { useOwnSideTop, useStuckHand } from "../lib/stuck";
 import { Energy } from "./ui";
 import { BoardButton, HalfMat, MatPile, backdropProps } from "./Mat";
 import { MATS, matById, matFor, type Mat } from "../boards/library";
@@ -820,6 +821,8 @@ export type Opponent = {
   title: string;
   ace: number;
   venue?: string;
+  /** The play mat they picked (live games). Without it, a mat that suits their venue. */
+  mat?: string;
 };
 
 export function PracticeTable({
@@ -831,6 +834,7 @@ export function PracticeTable({
   error,
   clearError,
   thinking,
+  thinkingText,
   finished,
 }: {
   state: PState;
@@ -841,6 +845,8 @@ export function PracticeTable({
   error: string | null;
   clearError: () => void;
   thinking: boolean;
+  /** What to show while the other side is moving (default "… is thinking…"). */
+  thinkingText?: string;
   finished: ReactNode;
 }) {
   const oppSeat = otherSeat(me);
@@ -860,9 +866,13 @@ export function PracticeTable({
   const prefs = useBoardPrefs();
   const mats = prefs.layout === "mats";
   const myMat = matById(prefs.mat) ?? MATS[0];
-  // The computer plays on a mat that suits its Gym's type.
-  const theirMat = matFor(venueById(opponent.venue)?.type, myMat.id);
+  // A live opponent brings their own mat; the computer plays on one that suits its Gym's type.
+  const theirMat = matById(opponent.mat) ?? matFor(venueById(opponent.venue)?.type, myMat.id);
   const backdrop = backdropProps(prefs);
+  // The hand shows whole cards under the board, and only their top half while pinned to the bottom of the screen.
+  const hand = useStuckHand();
+  // The column beside the board starts level with your own half of it.
+  const side = useOwnSideTop([mats, state.status]);
 
   const play = (a: PAction) => {
     setRaise(null);
@@ -976,7 +986,7 @@ export function PracticeTable({
     <div className="table-wrap practice">
       <div className="table-bar">
         <span className={`turn-pill${myTurn ? " mine" : ""}`}>{turnLabel}</span>
-        {thinking && <span className="turn-pill thinking">{theirs.name} is thinking…</span>}
+        {thinking && <span className="turn-pill thinking">{thinkingText ?? `${theirs.name} is thinking…`}</span>}
         <span className="bar-spacer" />
         {actions
           .filter((a) => !a.id.startsWith("ab:") || !a.blocked)
@@ -1035,7 +1045,7 @@ export function PracticeTable({
       {state.status === "setup" && state.setupDone[me] && <div className="banner">Waiting for {theirs.name}…</div>}
       {finished}
 
-      <div className="table-layout">
+      <div className="table-layout" ref={side.layout}>
         <div
           className={`board${mats ? " mats" : backdrop.className}${drag.dragging ? " dragging" : ""}${drag.dropState("board") ? ` drop-${drag.dropState("board")}` : ""}`}
           style={mats ? undefined : backdrop.style}
@@ -1125,7 +1135,7 @@ export function PracticeTable({
               </div>
             </>
           )}
-          <div className={`my-hand${raise ? " raising" : ""}`} aria-label="Your hand">
+          <div className={`my-hand whole${raise ? " raising" : ""}${hand.stuck ? " stuck" : ""}`} aria-label="Your hand">
             {mine.hand.length ? (
               mine.hand.map((c) => {
                 const role = setupPick.active === c.uid ? "Active" : setupPick.bench.includes(c.uid) ? "Bench" : null;
@@ -1148,9 +1158,10 @@ export function PracticeTable({
               <p className="muted small">No cards in hand.</p>
             )}
           </div>
+          <div ref={hand.end} className="hand-end" aria-hidden="true" />
         </div>
 
-        <aside className="table-side">
+        <aside className="table-side" style={side.top ? { marginTop: side.top } : undefined}>
           {selected ? (
             <PracticePanel
               card={selected}

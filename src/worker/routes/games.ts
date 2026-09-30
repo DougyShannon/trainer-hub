@@ -4,6 +4,8 @@ import type { AppEnv, User } from "../types";
 import { requireUser } from "../lib/auth";
 import { parseJson } from "../lib/json";
 import type { CardRef, PlayerInit } from "../../shared/game-types";
+import type { PCard } from "../../shared/practice/types";
+import { loadDeck } from "./practice";
 
 export const games = new Hono<AppEnv>();
 
@@ -57,12 +59,23 @@ async function deckForTable(db: D1Database, user: User, deckId: unknown) {
   }
   if (cards.length !== 60) return { error: "That deck doesn't have 60 cards." } as const;
 
+  // Everything the rules engine needs, so the game carries out every card. Random ids, so a card's id
+  // says nothing about which card it is.
+  const loaded = await loadDeck(
+    db,
+    stored.map((e) => [e.id, e.count]),
+  );
+  const full: PCard[] = loaded.cards.flatMap(({ card, count }) => Array.from({ length: count }, () => ({ ...card, uid: crypto.randomUUID().slice(0, 13) })));
+  if (full.length !== 60) return { error: "That deck doesn't have 60 cards." } as const;
+  if (!full.some((c) => c.supertype === "Pokémon" && c.subtypes.includes("Basic"))) return { error: "That deck has no Basic Pokémon to start with." } as const;
+
   const player: PlayerInit = {
     userId: user.id,
     trainerName: user.trainerName,
     avatarDex: user.avatarDex,
     deckName: deck.name as string,
     cards,
+    full,
   };
   return { player, format: deck.format as string } as const;
 }
@@ -85,9 +98,7 @@ export const gameSummary = (r: Record<string, unknown>) => ({
   isOpen: !!r.is_open,
   venue: (r.venue as string | null) ?? null,
   host: { trainerName: r.host_name as string, avatarDex: r.host_avatar as number, deckName: r.host_deck_name as string },
-  guest: r.guest_name
-    ? { trainerName: r.guest_name as string, avatarDex: r.guest_avatar as number, deckName: r.guest_deck_name as string }
-    : null,
+  guest: r.guest_name ? { trainerName: r.guest_name as string, avatarDex: r.guest_avatar as number, deckName: r.guest_deck_name as string } : null,
   winner: (r.winner_name as string | null) ?? null,
   endReason: (r.end_reason as string | null) ?? null,
   turns: r.turns as number,
@@ -174,9 +185,7 @@ games.post("/api/games/:id/join", requireUser, async (c) => {
   if (deck.format !== game.format) return c.json({ error: `This game is for ${game.format} decks. Pick a ${game.format} deck.` }, 400);
 
   // Only one person can take the empty seat, even if two click Join at the same moment.
-  const claimed = await c.env.DB.prepare(
-    `UPDATE games SET guest_user_id = ?, guest_deck_name = ?, status = 'setup' WHERE id = ? AND status = 'waiting'`,
-  )
+  const claimed = await c.env.DB.prepare(`UPDATE games SET guest_user_id = ?, guest_deck_name = ?, status = 'setup' WHERE id = ? AND status = 'waiting'`)
     .bind(user.id, deck.player.deckName, id)
     .run();
   if (!claimed.meta.changes) return c.json({ error: "Someone has already joined this game." }, 409);
