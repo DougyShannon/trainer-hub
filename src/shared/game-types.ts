@@ -1,6 +1,8 @@
 // Types shared by the game room (server) and the game table (browser).
 // The server holds the full GameState; each player receives a GameView with hidden cards removed.
 
+import type { PAction, PCard, PState } from "./practice/types";
+
 export type Seat = "p1" | "p2";
 export const SEATS: Seat[] = ["p1", "p2"];
 export const otherSeat = (s: Seat): Seat => (s === "p1" ? "p2" : "p1");
@@ -30,6 +32,8 @@ export type PlayerInit = {
   avatarDex: number;
   deckName: string;
   cards: CardRef[];
+  /** The same deck with everything the rules engine needs. Games with it are played on the rules engine. */
+  full?: PCard[];
 };
 
 export type PlayerState = Omit<PlayerInit, "cards"> & {
@@ -65,6 +69,11 @@ export type GameState = {
   version: number;
   cannotDraw: Seat | null; // a player who had to draw from an empty deck, which loses the game
   offlineSince: Record<Seat, number | null>;
+  /**
+   * The game on the rules engine (the same one as practice games), which carries out every card.
+   * Games started before it existed don't have it and stay a manual table.
+   */
+  rules?: PState;
 };
 
 // ----- What each browser receives -----
@@ -104,6 +113,8 @@ export type GameView = {
   log: LogEntry[];
   version: number;
   canClaimWin: boolean; // true when the viewer's opponent has lost but hasn't conceded
+  /** The rules engine's game as this viewer may see it (hidden cards replaced), for rules games. */
+  rules?: PState;
 };
 
 // ----- Actions a player can send -----
@@ -135,7 +146,9 @@ export type GameAction =
   | { type: "concede" }
   | { type: "claimWin" }
   | { type: "chat"; text: string }
-  | { type: "mat"; id: string };
+  | { type: "mat"; id: string }
+  /** A move on the rules engine (rules games only). */
+  | { type: "rules"; action: PAction };
 
 // ----- Messages over the WebSocket -----
 

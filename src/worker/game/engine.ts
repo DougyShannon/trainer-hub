@@ -1,6 +1,10 @@
-// The game table's rules. The table is manual, like playing on a real mat: players move their own
+// The live game table. New games are played on the rules engine (src/shared/practice, the same one
+// as practice games), which carries out every card; this file then only seats the players, relays the
+// moves and hides what each player mustn't see.
+//
+// Games started before that were a manual table, like playing on a real mat: players move their own
 // cards and the engine only keeps each move sensible (hidden cards stay hidden, zones stay in bounds,
-// turns alternate). Card text is not enforced.
+// turns alternate). Card text is not enforced. That code stays so those games can finish.
 
 import {
   AWAY_LIMIT_MS,
@@ -24,6 +28,8 @@ import {
   type SlotView,
   type Target,
 } from "../../shared/game-types";
+import { applyPractice, newPracticeGame, RuleError } from "../../shared/practice/engine";
+import type { PAction, PCard, PState } from "../../shared/practice/types";
 
 const LOG_LIMIT = 200;
 
@@ -85,6 +91,8 @@ export function newGame(id: string, format: string, host: PlayerInit): GameState
 }
 
 function newPlayer({ cards, ...info }: PlayerInit): PlayerState {
+  // A rules game keeps the full cards until the second player joins, then the rules engine deals.
+  if (info.full) return { ...info, deck: [], hand: [], prizes: [], discard: [], lostZone: [], active: null, bench: [], ready: false, mulligans: 0 };
   return {
     ...info,
     deck: shuffle([...cards]),
@@ -104,6 +112,19 @@ export function joinGame(state: GameState, guest: PlayerInit) {
   if (state.status !== "waiting") fail("This game has already started.");
   state.players.p2 = newPlayer(guest);
   state.status = "setup";
+  const host = state.players.p1!;
+  const p2 = state.players.p2;
+  if (host.full && p2.full) {
+    // The rules engine deals, handles mulligans and runs the game from here.
+    state.rules = newPracticeGame({ name: host.trainerName, cards: host.full }, { name: p2.trainerName, cards: p2.full });
+    for (const p of [host, p2]) {
+      delete p.full;
+      p.deck = [];
+    }
+    log(state, null, `${guest.trainerName} joined with ${guest.deckName}.`, "system");
+    syncRules(state);
+    return;
+  }
   log(state, null, `${guest.trainerName} joined with ${guest.deckName}. Both players draw 7 cards.`, "system");
   for (const seat of SEATS) draw(state, seat, HAND_SIZE, true);
   for (const seat of SEATS) {
@@ -143,8 +164,7 @@ function removeSlot(p: PlayerState, ref: SlotRef) {
   else p.bench.splice(ref.index, 1);
 }
 
-const slotName = (ref: SlotRef, slot: Slot) =>
-  `${ref.zone === "active" ? "Active" : "Benched"} ${topOf(slot).name}`;
+const slotName = (ref: SlotRef, slot: Slot) => `${ref.zone === "active" ? "Active" : "Benched"} ${topOf(slot).name}`;
 
 /** Finds one of the player's own cards wherever it is and takes it out of that zone. */
 function takeCard(state: GameState, seat: Seat, uid: string) {
@@ -202,15 +222,25 @@ export function applyAction(state: GameState, seat: Seat, action: GameAction): {
   }
   if (state.status === "waiting") fail("Waiting for an opponent to join.");
   if (state.status === "finished" && action.type !== "chat") fail("This game is over.");
+  if (state.rules) return applyRulesAction(state, seat, action);
 
   const inSetup = state.status === "setup";
   const setupOnly = () => inSetup || fail("That's only allowed while setting up.");
   const playingOnly = () => state.status === "playing" || fail("Finish setting up first.");
   const notReady = () => !p.ready || fail("You're already ready. Wait for your opponent.");
+  // Drawing, searching and playing cards only happen on your own turn. Damage counters, conditions
+  // and coin flips can be done any time.
+  // (A Knocked Out Pokémon is also cleared away, and its replacement sent in, on the other player's turn.)
+  const promoting = ((action.type === "move" && action.to.zone === "active" && action.to.mode === "place") || action.type === "switch") && !p.active;
+  const ownTurnOnly = ["draw", "shuffle", "mill", "searchDeck", "shuffleHandIntoDeck", "takePrize", "switch", "move"].includes(action.type);
+  if (state.status === "playing" && ownTurnOnly && !promoting && state.current !== seat) fail("Wait for your turn.");
 
   switch (action.type) {
     case "chat": {
-      const text = String(action.text ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
+      const text = String(action.text ?? "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 300);
       if (text) log(state, seat, `${who}: ${text}`, "chat");
       return {};
     }
@@ -272,10 +302,7 @@ export function applyAction(state: GameState, seat: Seat, action: GameAction): {
       const target = action.to;
       if (inSetup) {
         notReady();
-        const allowed =
-          (target.zone === "active" || target.zone === "bench") && target.mode === "place"
-            ? true
-            : target.zone === "hand";
+        const allowed = (target.zone === "active" || target.zone === "bench") && target.mode === "place" ? true : target.zone === "hand";
         if (!allowed) fail("While setting up you can only place Basic Pokémon.");
       }
       const { card, from } = takeCard(state, seat, action.uid);
@@ -467,8 +494,7 @@ function moveTo(state: GameState, seat: Seat, card: CardRef, from: string, targe
     }
     case "active":
     case "bench": {
-      const ref: SlotRef | null =
-        target.zone === "active" ? { zone: "active" } : target.index === null ? null : { zone: "bench", index: target.index };
+      const ref: SlotRef | null = target.zone === "active" ? { zone: "active" } : target.index === null ? null : { zone: "bench", index: target.index };
 
       if (target.mode === "place") {
         if (!isPokemon(card)) fail("Only Pokémon can be put into play that way.");
@@ -547,6 +573,11 @@ function claimReason(state: GameState, seat: Seat): string | null {
   if (state.status !== "playing") return null;
   const opp = otherSeat(seat);
   const o = player(state, opp);
+  if (state.rules) {
+    // The rules engine ends the game itself when a player loses; only leaving is left to claim.
+    const gone = state.offlineSince[opp];
+    return gone && Date.now() - gone >= AWAY_LIMIT_MS ? `${o.trainerName} left the game.` : null;
+  }
   if (state.cannotDraw === opp) return `${o.trainerName} couldn't draw a card.`;
   if (!o.active && !o.bench.length) return `${o.trainerName} has no Pokémon left in play.`;
   const away = state.offlineSince[opp];
@@ -611,5 +642,116 @@ export function viewFor(state: GameState, viewer: Seat | null, online: Record<Se
     log: state.log.slice(-120),
     version: state.version,
     canClaimWin: viewer ? claimReason(state, viewer) !== null : false,
+    rules: state.rules ? rulesView(state.rules, viewer) : undefined,
   };
+}
+
+// ----- Rules games -----
+
+/** A move in a rules game: the rules engine checks and carries it out. */
+function applyRulesAction(state: GameState, seat: Seat, action: GameAction): { privateDeck?: CardRef[] } {
+  const rules = state.rules!;
+  const p = player(state, seat);
+  switch (action.type) {
+    case "chat": {
+      const text = String(action.text ?? "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 300);
+      if (text) log(state, seat, `${p.trainerName}: ${text}`, "chat");
+      return {};
+    }
+    case "concede":
+      if (rules.status === "finished") fail("This game is over.");
+      rulesMove(state, seat, { type: "concede" });
+      return {};
+    case "claimWin": {
+      const reason = claimReason(state, seat);
+      if (!reason) fail("You can only claim the win when your opponent has left the game.");
+      rules.status = "finished";
+      rules.winner = seat;
+      rules.endReason = reason;
+      rules.prompt = null;
+      rules.queue = [];
+      syncRules(state);
+      return {};
+    }
+    case "rules":
+      if (!action.action || typeof action.action !== "object") fail("Unknown action.");
+      rulesMove(state, seat, action.action);
+      return {};
+  }
+  return fail("That move is done for you in this game.");
+}
+
+function rulesMove(state: GameState, seat: Seat, action: PAction) {
+  try {
+    applyPractice(state.rules!, seat, action);
+  } catch (e) {
+    // The room reloads the saved game after a GameError, so a half-done move is thrown away.
+    if (e instanceof RuleError) fail(e.message);
+    throw e;
+  }
+  syncRules(state);
+}
+
+/** Keeps the table's own status, turn and winner in step with the rules engine (the lobby and profiles read them). */
+function syncRules(state: GameState) {
+  const r = state.rules!;
+  state.turn = r.turn;
+  state.current = r.status === "playing" ? r.current : null;
+  if (r.status === "playing" && state.status === "setup") state.status = "playing";
+  if (r.status === "finished" && state.status !== "finished") finish(state, r.winner ?? "p1", r.endReason ?? "The game is over.");
+}
+
+const hiddenCard = (uid: string): PCard => ({
+  uid,
+  id: "hidden",
+  name: "Face-down card",
+  supertype: "Trainer",
+  subtypes: [],
+  hp: null,
+  types: [],
+  evolvesFrom: null,
+  image: null,
+  imageLarge: null,
+  attacks: [],
+  abilities: [],
+  weaknesses: [],
+  resistances: [],
+  retreat: 0,
+  rules: [],
+  candyFrom: null,
+});
+
+/**
+ * The rules game as one player (or a spectator) may see it: decks, Prize cards and the opponent's
+ * hand are face down, except cards the viewer is choosing from right now. Face-down cards get new
+ * ids so nobody can follow a card around a shuffled deck.
+ */
+export function rulesView(r: PState, viewer: Seat | null): PState {
+  const v = structuredClone(r);
+  const mine = (p: { seat: Seat }) => p.seat === viewer;
+  const keep = new Set(r.prompt && mine(r.prompt) ? [...r.prompt.options, ...(r.prompt.shown ?? [])] : []);
+  let n = 0;
+  const hide = (c: PCard) => (keep.has(c.uid) ? c : hiddenCard(`hidden-${n++}`));
+  const hideSlots = !(r.setupDone.p1 && r.setupDone.p2) && r.status === "setup";
+  for (const seat of SEATS) {
+    const p = v.players[seat];
+    p.deck = p.deck.map(hide);
+    p.prizes = p.prizes.map(hide);
+    if (seat !== viewer) {
+      p.hand = p.hand.map(hide);
+      // While setting up, Pokémon go down face down until both players are ready.
+      if (hideSlots) {
+        if (p.active) p.active = { ...p.active, pokemon: p.active.pokemon.map(hide), energy: [], tool: null, extraTools: undefined };
+        p.bench = p.bench.map((s) => ({ ...s, pokemon: s.pokemon.map(hide), energy: [], tool: null, extraTools: undefined }));
+      }
+    }
+  }
+  // Someone else's choice: say what they're doing, but not what they're choosing from.
+  const strip = (q: NonNullable<PState["prompt"]>) => (mine(q) ? q : { ...q, options: [], shown: [], labels: {}, data: {} });
+  if (v.prompt) v.prompt = strip(v.prompt);
+  v.queue = v.queue.map(strip);
+  return v;
 }
