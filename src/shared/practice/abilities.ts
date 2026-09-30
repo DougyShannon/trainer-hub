@@ -51,6 +51,8 @@ import {
 import { abilityTriggers, abilityUses, lustrousAssist, selfOf, type Use } from "./ability-uses";
 import { me, names, pull, them } from "./trainers";
 import type { Attack, PCard, PPlayer, PSlot, PState, SlotKey } from "./types";
+import { marked, marksOn, turnLog } from "./lasting";
+import { specialEffectsProof } from "./special-energy";
 
 type Data = Record<string, unknown>;
 
@@ -69,6 +71,8 @@ export function lockedByAbility(state: PState, slot: PSlot): boolean {
   const c = topCard(slot);
   if (!c.abilities.length) return false;
   const owner = ownerOf(state, slot);
+  // Ancient Star: "Your opponent's Pokémon V in play, except any Aerodactyl VSTAR, have no Abilities."
+  if (isV(c) && c.name !== "Aerodactyl VSTAR" && inPlay(state.players[otherSeat(owner)]).some((s) => s.gained?.includes("Ancient Star"))) return true;
   const active = isActive(state, slot);
   for (const seat of ["p1", "p2"] as Seat[]) {
     for (const lock of inPlay(state.players[seat])) {
@@ -134,6 +138,7 @@ export function abilityProof(state: PState, seat: Seat, slot: PSlot) {
 export function effectsProof(state: PState, seat: Seat, attacker: PSlot, slot: PSlot) {
   const owner = otherSeat(seat);
   const a = topCard(attacker);
+  if (specialEffectsProof(state, slot) || marked(state, slot, "effectsProof")) return true;
   if (["Unfazed Fat", "Emperor's Stance", "Cocoon Cover", "Flare Veil", "Protective Cover", "Unaware", "Hide 'n' Sneak"].some((n) => has(state, slot, n)))
     return true;
   if (slot.energy.length && anywhere(state, owner, "Protective Mycelium")) return true;
@@ -289,7 +294,13 @@ export function abilityWeakness(state: PState, attacker: PSlot, defender: PSlot)
 /** Fairy Zone makes the other player's Dragon Pokémon weak to Psychic. */
 export function weaknessesOf(state: PState, defender: PSlot) {
   const d = topCard(defender);
+  if (marked(state, defender, "noWeakness")) return [];
+  const changed = marksOn(state, defender, "weakness")[0];
+  if (changed) return [{ type: changed.data ?? "Colorless", value: "×2" }];
   if (ofType(d, "Dragon") && anywhere(state, otherSeat(ownerOf(state, defender)), "Fairy Zone")) return [{ type: "Psychic", value: "×2" }];
+  // Star Cipher: "The Weakness of each of your opponent's Pokémon in play is now Psychic."
+  if (inPlay(state.players[otherSeat(ownerOf(state, defender))]).some((s) => s.gained?.includes("Star Cipher")))
+    return d.weaknesses.map((w) => ({ ...w, type: "Psychic" }));
   return d.weaknesses;
 }
 /** A Pokémon's types, with Abilities that add types (Scovillain, Iron Treads). */
@@ -891,6 +902,7 @@ export function trackMoves(state: PState) {
       runTrigger(state, seat, outgoing, "toBench");
     }
     if (myTurn && p.bench.every((s) => s.pokemon[0]?.uid !== now)) {
+      turnLog(state, seat).movedUp.push(p.active.pokemon[0].uid);
       runTrigger(state, seat, p.active, "toActive");
       if (baseName(topCard(p.active).name) === "Mega Latias ex") {
         const latios = holders(state, "Lustrous Assist", seat).find((h) => !used(p, h.slot, "Lustrous Assist"));

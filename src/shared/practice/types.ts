@@ -46,6 +46,10 @@ export type PSlot = {
   playedTurn: number;
   /** Set by attacks like "During your next turn, this Pokémon can't attack." */
   cantAttackTurn: number | null;
+  /** The last turn this Pokémon was damaged by an attack, and how much damage it took that turn. */
+  lastHit?: { turn: number; amount: number };
+  /** Abilities it gained from an attack "until this Pokémon leaves play" (Star Cipher, Ancient Star). */
+  gained?: string[];
   /** Other attack effects that last until a later turn, keyed by the turn they apply in. They end if it moves to the Bench or evolves. */
   effects: {
     cantRetreat?: number;
@@ -54,6 +58,8 @@ export type PSlot = {
     attackTax?: number;
     /** Heavier Poison, e.g. 80 damage instead of 10 during Pokémon Checkup. */
     poisonDamage?: number;
+    /** Heavier Confusion: damage when a Confused attack fails, instead of 30. */
+    confuseDamage?: number;
     protect?: { turn: number; effects: boolean };
     guard?: { turn: number; amount: number };
     boost?: { turn: number; amount: number };
@@ -143,6 +149,8 @@ export type PState = {
   turn: number; // counts both players' turns, starting at 1
   current: Seat;
   first: Seat;
+  /** This player takes another turn after the current one (Star Chronos). */
+  extraTurn?: Seat;
   prompt: Prompt | null;
   /** Choices waiting behind the current one (an attack can ask for more than one). */
   queue: Prompt[];
@@ -184,8 +192,6 @@ export type TurnEffect = {
 
 export type SlotKey = "active" | `bench:${number}`;
 
-import type { ManualOp } from "./manual";
-
 export type PAction =
   | { type: "setup"; active: string; bench: string[] }
   | { type: "playBasic"; uid: string }
@@ -194,10 +200,9 @@ export type PAction =
   | { type: "attachTool"; uid: string; slot: SlotKey }
   | { type: "playTrainer"; uid: string }
   | { type: "retreat"; bench: number }
-  | { type: "attack"; index: number }
+  | { type: "attack"; index: number; /** A Benched Pokémon using an attack that can be used from the Bench. */ bench?: number }
   | { type: "choose"; picks: string[] }
   | { type: "endTurn" }
-  | { type: "byHand"; op: ManualOp; amount?: number }
   /** A card action that isn't playing a card, like using a Stadium (see cardActions in effects.ts). */
   | { type: "special"; id: string }
   | { type: "concede" };

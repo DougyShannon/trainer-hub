@@ -1,6 +1,6 @@
 // More Trainer cards that practice games play automatically: the everyday draw, search, heal,
 // recover and switch cards in the Standard format. Built from a few shared shapes so each card
-// is a line or two. Cards that aren't here or in trainers.ts are resolved "by hand" (manual.ts).
+// is a line or two. The rest are in trainers.ts and trainers-extra.ts.
 
 import { otherSeat, type Seat } from "../game-types";
 import {
@@ -25,7 +25,8 @@ import {
   switchActive,
   topCard,
 } from "./engine";
-import { attachedTo, benchLimit, canHeal, setCondition } from "./effects";
+import { attachedTo, benchLimit, canHeal, flipping, setCondition } from "./effects";
+import { noteHealed, seatOf } from "./lasting";
 import { discardLocked, pickUpLocked, trainersStayDiscarded } from "./abilities";
 import {
   benchSlots,
@@ -69,6 +70,8 @@ export function heal(slot: PSlot, amount: number) {
   if (!canHeal()) return 0;
   const before = slot.damage;
   slot.damage = Math.max(0, slot.damage - amount);
+  const game = flipping();
+  if (game && before > slot.damage) noteHealed(game, seatOf(game, slot), slot);
   return before - slot.damage;
 }
 

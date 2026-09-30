@@ -22,6 +22,8 @@ import {
   slotKeys,
   topCard,
   usableAttacks,
+  usableFromBench,
+  benchAttackReason,
   attacksOf,
   isStadium,
   BENCH_SIZE,
@@ -29,6 +31,7 @@ import {
 import { countFor, finalDamage } from "./attacks";
 import { trainerFor } from "./trainers";
 import { baseName, benchLimit, isAutomatedTool, toolRoom } from "./effects";
+import { unitIs } from "./special-energy";
 import { cardActions } from "./actions";
 import { abilityWorth } from "./abilities";
 import type { Attack, PAction, PCard, PPlayer, PSlot, PState, SlotKey } from "./types";
@@ -59,7 +62,8 @@ export function missing(cost: string[], energy: PCard[]) {
   const pool = energy.flatMap((e) => energyProvides(e));
   let miss = 0;
   for (const need of cost.filter((c) => c !== "Colorless" && c !== "Free")) {
-    const i = pool.indexOf(need);
+    let i = pool.indexOf(need);
+    if (i < 0) i = pool.findIndex((u) => unitIs(u, need));
     if (i < 0) miss++;
     else pool.splice(i, 1);
   }
@@ -274,6 +278,11 @@ function mainPhase(state: PState, seat: Seat, skill: BotSkill): PAction {
       if (value > bestValue) [best, bestValue] = [i, value];
     }
     if (bestValue > 0) return { type: "attack", index: best };
+  }
+  // A Benched Pokémon with an attack it can use from the Bench.
+  for (const [b, slot] of p.bench.entries()) {
+    const i = attacksOf(state, slot).findIndex((a, k) => usableFromBench(a) && !benchAttackReason(state, seat, b, k));
+    if (i >= 0) return { type: "attack", index: i, bench: b };
   }
   return { type: "endTurn" };
 }
