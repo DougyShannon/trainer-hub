@@ -192,6 +192,8 @@ export type TurnEffect = {
 
 export type SlotKey = "active" | `bench:${number}`;
 
+import type { ManualOp } from "./manual";
+
 export type PAction =
   | { type: "setup"; active: string; bench: string[] }
   | { type: "playBasic"; uid: string }
@@ -203,6 +205,8 @@ export type PAction =
   | { type: "attack"; index: number; /** A Benched Pokémon using an attack that can be used from the Bench. */ bench?: number }
   | { type: "choose"; picks: string[] }
   | { type: "endTurn" }
+  /** A "By hand" move for card text the game doesn't do itself yet (see manual.ts). */
+  | { type: "byHand"; op: ManualOp; amount?: number }
   /** A card action that isn't playing a card, like using a Stadium (see cardActions in effects.ts). */
   | { type: "special"; id: string }
   | { type: "concede" };

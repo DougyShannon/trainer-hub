@@ -9,6 +9,7 @@ import { assistant } from "./routes/assistant";
 import { practice } from "./routes/practice";
 import { teams } from "./routes/teams";
 import { boards } from "./routes/boards";
+import { cardsToFix } from "./routes/cards-to-fix";
 
 const app = new Hono<AppEnv>();
 
@@ -23,6 +24,7 @@ app.route("/", assistant);
 app.route("/", practice);
 app.route("/", teams);
 app.route("/", boards);
+app.route("/", cardsToFix);
 
 app.notFound((c) => c.json({ error: "Not found" }, 404));
 app.onError((err, c) => {
