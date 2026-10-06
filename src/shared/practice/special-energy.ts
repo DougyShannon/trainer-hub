@@ -18,6 +18,29 @@ const isSpecial = (c: PCard) => c.supertype === "Energy" && !isBasicEnergy(c);
 const working = (state: PState | undefined) => !specialEnergyOff(state);
 const isEvolution = (c: PCard) => !c.subtypes.includes("Basic");
 const isTeamRockets = (c: PCard) => c.name.startsWith("Team Rocket's");
+/** Special Energy cards whose text the game carries out. Any other Special Energy just provides Colorless, and its owner does the rest by hand. */
+export const AUTOMATED_SPECIAL_ENERGY = [
+  "Boomerang Energy",
+  "Double Colorless Energy",
+  "Double Turbo Energy",
+  "Enriching Energy",
+  "Gift Energy",
+  "Ignition Energy",
+  "Jet Energy",
+  "Legacy Energy",
+  "Luminous Energy",
+  "Medical Energy",
+  "Mist Energy",
+  "Neo Upper Energy",
+  "Prism Energy",
+  "Regenerative Energy",
+  "Reversal Energy",
+  "Spiky Energy",
+  "Team Rocket's Energy",
+  "Therapeutic Energy",
+  "V Guard Energy",
+];
+
 /** A working Special Energy with this name on a Pokémon. */
 export const hasSpecial = (state: PState | undefined, slot: PSlot, name: string) => working(state) && slot.energy.some((e) => nameOf(e) === name);
 

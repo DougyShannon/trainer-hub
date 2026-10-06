@@ -10,10 +10,20 @@ import type { Attack, PAction, PCard, PPlayer, PSlot, PState, Prompt, SlotKey } 
 import { ATTACK_RESUME, resolveAttack } from "./attacks";
 import { attackRuleCanUse, attackRuleResume } from "./attack-rules";
 import { cardLocked, locked, locksOn, marked, marksOn, turnLog, type Mark } from "./lasting";
-import { ANY, boomerangsAfter, boomerangsBefore, energyAttachBlock, specialOnEvolve, specialProvides, unitIs } from "./special-energy";
+import {
+  ANY,
+  AUTOMATED_SPECIAL_ENERGY,
+  boomerangsAfter,
+  boomerangsBefore,
+  energyAttachBlock,
+  specialOnEvolve,
+  specialProvides,
+  unitIs,
+} from "./special-energy";
 import { trainerFor } from "./trainers";
 import { FIRST_TURN_SUPPORTERS } from "./trainers-more";
 import { FIRST_TURN_EXTRA } from "./trainers-extra";
+import { applyManual, MANUAL_RESUME } from "./manual";
 import {
   addTool,
   attachedTo,
@@ -490,6 +500,7 @@ export function cantPlayTrainerReason(state: PState, seat: Seat, card: PCard): s
 
 /** Whether the game does what this card says for you. */
 export const isAutomated = (card: PCard) => {
+  if (isEnergy(card)) return isBasicEnergy(card) || AUTOMATED_SPECIAL_ENERGY.includes(baseName(card.name));
   if (card.supertype !== "Trainer") return true;
   const name = baseName(card.name);
   if (isTool(card)) return isAutomatedTool(name);
@@ -638,7 +649,7 @@ export function applyPractice(state: PState, seat: Seat, action: PAction) {
       const effect = trainerFor(card.name);
       log(state, seat, `${p.name} played ${card.name}.`);
       if (!effect) {
-        log(state, seat, `The game doesn't know what ${card.name} does yet.`, "system");
+        log(state, seat, `The game can't do what ${card.name} says yet: ${p.name} does it with the By hand moves.`, "system");
         return;
       }
       effect.play(state, seat, card);
@@ -734,6 +745,12 @@ export function applyPractice(state: PState, seat: Seat, action: PAction) {
       return settle(state);
     }
 
+    case "byHand": {
+      mustBeYourTurn(state, seat);
+      applyManual(state, seat, action.op, action.amount);
+      return settle(state);
+    }
+
     case "endTurn": {
       mustBeYourTurn(state, seat);
       state.pendingEnd = true;
@@ -810,6 +827,7 @@ export function resolvePrompt(state: PState, seat: Seat, picks: string[]) {
     attackRuleResume(prompt.effect) ??
     EFFECT_RESUME[prompt.effect] ??
     ABILITY_RESUME[prompt.effect] ??
+    MANUAL_RESUME[prompt.effect] ??
     abilityEffect(prompt.effect)?.resume ??
     trainerFor(prompt.effect)?.resume ??
     actionEffect(prompt.effect)?.resume;
