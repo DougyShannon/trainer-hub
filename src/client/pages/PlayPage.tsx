@@ -4,7 +4,7 @@ import { send, useApi, type DeckSummary, type GameSummary } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { sprite } from "../lib/sprites";
 import { FORMAT_LABELS } from "../../shared/deck-rules";
-import { Loading } from "../components/ui";
+import { Loading, PageLogo } from "../components/ui";
 import { BoardChooser } from "../components/Mat";
 import { VenueSelect, VenueTag } from "../components/Venue";
 import { venueById } from "../../shared/venues";
@@ -86,7 +86,10 @@ export function PlayPage() {
     <div className="play">
       <div className="page-head">
         <div>
-          <h1>Play</h1>
+          <h1 className="with-logo">
+            <PageLogo />
+            Play
+          </h1>
           <p className="muted">
             Play a live game against another trainer. The table works like a real play mat: you move your own cards and
             the site keeps hidden cards hidden, deals prizes, flips coins and tracks turns.

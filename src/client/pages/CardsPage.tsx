@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useApi, type CardPage, type SetInfo } from "../lib/api";
-import { CardThumb, Energy, ErrorBox, Loading, TCG_TYPES } from "../components/ui";
+import { CardThumb, Energy, ErrorBox, Loading, TCG_TYPES, PageLogo } from "../components/ui";
 
 const SUBTYPES: Record<string, string[]> = {
   "Pokémon": ["Basic", "Stage 1", "Stage 2", "ex", "EX", "GX", "V", "VMAX", "VSTAR", "Radiant", "Tera", "BREAK", "MEGA"],
@@ -49,7 +49,10 @@ export function CardsPage() {
   return (
     <div className="cards-page">
       <div className="page-head">
-        <h1>Card database</h1>
+        <h1 className="with-logo">
+          <PageLogo />
+          Card database
+        </h1>
         <p className="muted">
           {data ? `${data.total.toLocaleString()} card${data.total === 1 ? "" : "s"}` : "Searching"}
           {hasFilters && " match your filters"}

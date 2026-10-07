@@ -2,7 +2,7 @@ import { Link } from "react-router";
 import { useApi, type DeckSummary } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { DeckTile } from "../components/DeckTile";
-import { ErrorBox, Loading } from "../components/ui";
+import { ErrorBox, Loading, PageLogo } from "../components/ui";
 
 export function DecksPage() {
   const { user, ready } = useAuth();
@@ -13,7 +13,10 @@ export function DecksPage() {
   return (
     <div className="decks-page">
       <div className="page-head">
-        <h1>{user ? "My decks" : "Deck builder"}</h1>
+        <h1 className="with-logo">
+          <PageLogo />
+          {user ? "My decks" : "Deck builder"}
+        </h1>
         <div className="row-actions">
           <Link to="/decks/new?import=1" className="secondary-btn">
             Import a list

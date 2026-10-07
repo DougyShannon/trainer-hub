@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { useApi, type PokemonSummary } from "../lib/api";
 import { animatedSprite, artwork, dexNumber, sprite } from "../lib/sprites";
-import { ErrorBox, GAME_TYPES, Loading, TypeBadge } from "../components/ui";
+import { ErrorBox, GAME_TYPES, Loading, TypeBadge, PageLogo } from "../components/ui";
 
 const GENERATIONS: Record<number, string> = {
   1: "Kanto", 2: "Johto", 3: "Hoenn", 4: "Sinnoh", 5: "Unova", 6: "Kalos", 7: "Alola", 8: "Galar", 9: "Paldea",
@@ -60,7 +60,10 @@ export function PokedexPage() {
   return (
     <div className="dex-page">
       <div className="page-head">
-        <h1>Pokédex</h1>
+        <h1 className="with-logo">
+          <PageLogo />
+          Pokédex
+        </h1>
         <p className="muted">{data ? `${shown.length.toLocaleString()} of ${data.length.toLocaleString()} Pokémon` : "Loading"}</p>
       </div>
 
