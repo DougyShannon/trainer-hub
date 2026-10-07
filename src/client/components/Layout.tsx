@@ -105,7 +105,7 @@ export function Layout() {
       <header className="site-header">
         <div className="site-header-inner">
           <Link to="/" className="logo">
-            <img src="/favicon.svg" alt="" width={26} height={26} />
+            <img src="/art/brand/cubone-logo.png" alt="" width={31} height={26} />
             Trainer Hub
           </Link>
           <nav className="site-nav" aria-label="Main">
