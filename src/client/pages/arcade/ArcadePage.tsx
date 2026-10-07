@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { useBest } from "../../lib/best";
+import { PageLogo } from "../../components/ui";
 import { artwork } from "../../lib/sprites";
 
 export function ArcadePage() {
@@ -9,7 +10,10 @@ export function ArcadePage() {
     <div className="arcade">
       <div className="page-head">
         <div>
-          <h1>Arcade</h1>
+          <h1 className="with-logo">
+            <PageLogo />
+            Arcade
+          </h1>
           <p className="muted">Quick games to play between matches. No account needed.</p>
         </div>
       </div>

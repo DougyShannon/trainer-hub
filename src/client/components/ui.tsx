@@ -80,6 +80,11 @@ export function Loading({ label = "Loading" }: { label?: string }) {
   );
 }
 
+/** The Pokémon logo shown beside main page headings (white background removed). */
+export function PageLogo() {
+  return <img className="page-logo" src="/art/brand/pokemon-logo-sm.webp" alt="" width={110} height={40} />;
+}
+
 export function ErrorBox({ message }: { message: string }) {
   return (
     <div className="error-box" role="alert">

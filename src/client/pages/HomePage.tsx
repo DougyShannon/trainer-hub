@@ -24,6 +24,7 @@ export function HomePage() {
     <div className="home">
       <section className="hero">
         <div className="hero-copy">
+          <img className="hero-logo" src="/art/brand/pokemon-logo.webp" alt="" width={320} height={116} />
           <p className="eyebrow">Fan-made Pokémon TCG hub</p>
           <h1>Look up any card. Learn every Pokémon.</h1>
           <p className="lede">

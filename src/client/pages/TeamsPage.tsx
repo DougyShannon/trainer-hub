@@ -2,7 +2,7 @@ import { Link } from "react-router";
 import { useApi, type TeamSummary } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { TeamTile } from "../components/TeamTile";
-import { ErrorBox, Loading } from "../components/ui";
+import { ErrorBox, Loading, PageLogo } from "../components/ui";
 
 export function TeamsPage() {
   const { user, ready } = useAuth();
@@ -13,7 +13,10 @@ export function TeamsPage() {
   return (
     <div className="decks-page">
       <div className="page-head">
-        <h1>{user ? "My teams" : "Team builder"}</h1>
+        <h1 className="with-logo">
+          <PageLogo />
+          {user ? "My teams" : "Team builder"}
+        </h1>
         <div className="row-actions">
           <Link to="/teams/new?import=1" className="secondary-btn">
             Import from Showdown
