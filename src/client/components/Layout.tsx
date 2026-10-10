@@ -114,6 +114,7 @@ export function Layout() {
             <NavLink to="/decks">Decks</NavLink>
             <NavLink to="/teams">Teams</NavLink>
             <NavLink to="/play">Play</NavLink>
+            <NavLink to="/battle">Battle</NavLink>
             <NavLink to="/arcade">Arcade</NavLink>
           </nav>
           <AccountMenu />
