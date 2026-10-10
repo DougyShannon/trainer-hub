@@ -10,6 +10,8 @@ import { WorldPage } from "./pages/WorldPage";
 import { PracticePage } from "./pages/PracticePage";
 import { PracticeGamePage } from "./pages/PracticeGamePage";
 import { MatMakerPage } from "./pages/MatMakerPage";
+import { BattlePage } from "./pages/BattlePage";
+import { BattleGamePage } from "./pages/BattleGamePage";
 import { BrowserRouter, Route, Routes } from "react-router";
 import { Layout } from "./components/Layout";
 import { HomePage } from "./pages/HomePage";
@@ -65,6 +67,8 @@ createRoot(document.getElementById("root")!).render(
           <Route path="play/practice/:level" element={<PracticeGamePage />} />
           <Route path="play/mats" element={<MatMakerPage />} />
           <Route path="play/:id" element={<GamePage />} />
+          <Route path="battle" element={<BattlePage />} />
+          <Route path="battle/:opponent" element={<BattleGamePage />} />
           <Route path="arcade" element={<ArcadePage />} />
           <Route path="arcade/whos-that-pokemon" element={<WhosThatPage />} />
           <Route path="arcade/type-quiz" element={<TypeQuizPage />} />
