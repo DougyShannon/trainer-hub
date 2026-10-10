@@ -2,7 +2,7 @@
 // is faster. The move buttons use it to show damage ranges, and the computer player uses it to
 // choose. Working on a copy means nothing here can change the real battle.
 
-import { State } from "@pkmn/sim";
+import { Battle, Dex, Pokemon, Side, State } from "@pkmn/sim";
 import { installTracer, type DamageCalc } from "./trace";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -29,11 +29,37 @@ export type Estimate = {
 /** A Pokémon in the battle, found by side and its place in that side's team list. */
 export type Ref = { side: number; index: number };
 
+/**
+ * Copying a battle writes links between its parts as "[Pokemon:p1a]", using each class's name.
+ * Minifying the site renames classes (Pokemon becomes something like "Ue"), so the copy came back
+ * with broken links. Putting the real names back keeps copies working in the live site.
+ */
+let named = false;
+function nameClasses(battle: Sim) {
+  if (named) return;
+  named = true;
+  const classes: [unknown, string][] = [
+    [Battle, "Battle"],
+    [battle.field.constructor, "Field"],
+    [Side, "Side"],
+    [Pokemon, "Pokemon"],
+    [(Dex as Sim).Condition, "Condition"],
+    [(Dex as Sim).Ability, "Ability"],
+    [(Dex as Sim).Item, "Item"],
+    [(Dex as Sim).Move, "Move"],
+    [(Dex as Sim).Species, "Species"],
+  ];
+  for (const [cls, name] of classes) {
+    if (typeof cls === "function" && cls.name !== name) Object.defineProperty(cls, "name", { value: name });
+  }
+}
+
 export class Lab {
   readonly battle: Sim;
   private last: DamageCalc | null = null;
 
   constructor(live: Sim) {
+    nameClasses(live);
     this.battle = State.deserializeBattle(State.serializeBattle(live));
     this.battle.restart(() => {});
     installTracer(this.battle, (calc) => {
