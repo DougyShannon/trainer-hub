@@ -371,9 +371,13 @@ function StatsEditor({ engine, format, set, onChange }: { engine: Engine; format
   const evTotal = STAT_IDS.reduce((n, s) => n + set.evs[s], 0);
   const limit = rules.evLimit;
   const left = limit == null ? null : limit - evTotal;
+  // Pokémon Champions has Stat Points (up to 32 a stat) instead of EVs, and no IVs.
+  const sp = rules.statPoints;
+  const word = sp ? "Stat Points" : "EVs";
+  const max = rules.statMax;
 
   const setEv = (stat: StatID, raw: number) => {
-    let value = Math.max(0, Math.min(252, Math.floor(raw) || 0));
+    let value = Math.max(0, Math.min(max, Math.floor(raw) || 0));
     if (limit != null) value = Math.min(value, set.evs[stat] + Math.max(0, limit - evTotal));
     onChange({ ...set, evs: { ...set.evs, [stat]: value } });
   };
@@ -408,10 +412,12 @@ function StatsEditor({ engine, format, set, onChange }: { engine: Engine; format
             <th scope="col" className="num base-col">
               Base
             </th>
-            <th scope="col">EVs</th>
-            <th scope="col" className="num">
-              IVs
-            </th>
+            <th scope="col">{sp ? "Points" : "EVs"}</th>
+            {!sp && (
+              <th scope="col" className="num">
+                IVs
+              </th>
+            )}
             <th scope="col" className="num">
               Final
             </th>
@@ -433,33 +439,35 @@ function StatsEditor({ engine, format, set, onChange }: { engine: Engine; format
                   <input
                     type="range"
                     min={0}
-                    max={252}
-                    step={4}
+                    max={max}
+                    step={sp ? 1 : 4}
                     value={set.evs[stat]}
                     onChange={(e) => setEv(stat, Number(e.target.value))}
-                    aria-label={`${STAT_NAMES[stat]} EVs`}
+                    aria-label={`${STAT_NAMES[stat]} ${word}`}
                   />
                   <input
                     type="number"
                     min={0}
-                    max={252}
+                    max={max}
                     value={set.evs[stat]}
                     onChange={(e) => setEv(stat, Number(e.target.value))}
-                    aria-label={`${STAT_NAMES[stat]} EVs`}
+                    aria-label={`${STAT_NAMES[stat]} ${word}`}
                     className="ev-num"
                   />
                 </td>
-                <td className="num">
-                  <input
-                    type="number"
-                    min={0}
-                    max={31}
-                    value={set.ivs[stat]}
-                    onChange={(e) => setIv(stat, Number(e.target.value))}
-                    aria-label={`${STAT_NAMES[stat]} IVs`}
-                    className="iv-num"
-                  />
-                </td>
+                {!sp && (
+                  <td className="num">
+                    <input
+                      type="number"
+                      min={0}
+                      max={31}
+                      value={set.ivs[stat]}
+                      onChange={(e) => setIv(stat, Number(e.target.value))}
+                      aria-label={`${STAT_NAMES[stat]} IVs`}
+                      className="iv-num"
+                    />
+                  </td>
+                )}
                 <td className="num final">
                   <span className="stat-track" aria-hidden="true">
                     <span className="stat-bar" style={{ width: `${Math.min(100, (value / (rules.levelLocked || set.level <= 50 ? 250 : 450)) * 100)}%` }} />
@@ -476,11 +484,11 @@ function StatsEditor({ engine, format, set, onChange }: { engine: Engine; format
           `${evTotal} EVs used (no limit in this format)`
         ) : (
           <>
-            <strong className={left < 0 ? "bad" : ""}>{left}</strong> of {limit} EVs left to spend. Each stat can take up to 252.
+            <strong className={left < 0 ? "bad" : ""}>{left}</strong> of {limit} {word} left to spend. Each stat can take up to {max}.
           </>
         )}{" "}
         <button type="button" className="link-btn" onClick={() => onChange({ ...set, evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 } })}>
-          Clear EVs
+          Clear {word}
         </button>
       </p>
       <p className="small muted">
@@ -575,14 +583,16 @@ function SetEditor({
               )}
             </select>
           </label>
-          <label className="field">
-            <span className="field-label">Tera Type</span>
-            <select id="set-tera" value={set.teraType} onChange={(e) => onChange({ ...set, teraType: e.target.value })}>
-              {engine.TERA_TYPES.map((t) => (
-                <option key={t}>{t}</option>
-              ))}
-            </select>
-          </label>
+          {rules.tera && (
+            <label className="field">
+              <span className="field-label">Tera Type</span>
+              <select id="set-tera" value={set.teraType} onChange={(e) => onChange({ ...set, teraType: e.target.value })}>
+                {engine.TERA_TYPES.map((t) => (
+                  <option key={t}>{t}</option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="check">
             <input id="set-shiny" type="checkbox" checked={set.shiny} onChange={(e) => onChange({ ...set, shiny: e.target.checked })} />
             Shiny
@@ -884,8 +894,10 @@ export function TeamBuilderPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { user, ready } = useAuth();
-  const { engine, error: engineError } = useEngine();
   const existing = useApi<TeamDetail>(id ? `/api/teams/${id}` : null, { fresh: true });
+  // A saved team or draft in a Champions format needs the Champions data before it can open.
+  const draftFormat = useMemo(() => (id ? null : readDraft()?.format), [id]);
+  const { engine, error: engineError } = useEngine([existing.data?.format, draftFormat]);
 
   const [loaded, setLoaded] = useState(false);
   const [name, setName] = useState("New team");
@@ -903,8 +915,9 @@ export function TeamBuilderPage() {
   // Load the saved team (or a draft started before logging in) once the Pokémon data is ready.
   useEffect(() => {
     if (!engine || loaded) return;
+    if (draftFormat && !engine.readyFor(draftFormat)) return;
     if (id) {
-      if (!existing.data) return;
+      if (!existing.data || !engine.readyFor(existing.data.format)) return;
       const d = existing.data;
       setName(d.name);
       setFormat(d.format);
@@ -936,7 +949,7 @@ export function TeamBuilderPage() {
     setSlot(Math.max(0, start.length - 1));
     setDirty(start.length > 0);
     setLoaded(true);
-  }, [engine, id, existing.data, loaded, params]);
+  }, [engine, id, existing.data, loaded, params, draftFormat]);
 
   useEffect(() => {
     if (!id && loaded && dirty) writeDraft({ name, format, isPublic, sets });
@@ -964,12 +977,31 @@ export function TeamBuilderPage() {
 
   const changeFormat = (next: string) => {
     if (!engine) return;
+    if (!engine.readyFor(next)) {
+      setMessage({ ok: true, text: "Loading the Pokémon Champions data..." });
+      engine.loadFor(next).then(
+        () => changeFormat(next),
+        () => setMessage({ ok: false, text: "The Pokémon Champions data didn't download. Try again." }),
+      );
+      return;
+    }
     const before = engine.formatRules(format);
     const after = engine.formatRules(next);
+    // Moving to or from Pokémon Champions turns EVs into Stat Points (252 EVs is about 32 points) and back.
+    const spread = (s: PokemonSet): Pick<PokemonSet, "evs" | "ivs"> => {
+      if (before.statPoints === after.statPoints) return { evs: s.evs, ivs: s.ivs };
+      const evs = { ...s.evs };
+      for (const k of STAT_IDS) evs[k] = after.statPoints ? Math.min(32, Math.round((s.evs[k] / 252) * 32)) : Math.min(252, s.evs[k] * 8);
+      return { evs, ivs: after.statPoints ? { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 } : s.ivs };
+    };
     change(() => {
       setFormat(next);
       setSets((list) =>
-        list.map((s) => ({ ...s, level: s.level === before.level || s.level > after.maxLevel ? Math.min(after.level, after.maxLevel) : s.level })),
+        list.map((s) => ({
+          ...s,
+          ...spread(s),
+          level: s.level === before.level || s.level > after.maxLevel ? Math.min(after.level, after.maxLevel) : s.level,
+        })),
       );
     });
   };
@@ -1043,7 +1075,7 @@ export function TeamBuilderPage() {
     navigate("/teams", { replace: true });
   };
 
-  const exportText = useMemo(() => (engine && modal === "export" ? engine.exportTeam(sets) : ""), [engine, modal, sets]);
+  const exportText = useMemo(() => (engine && modal === "export" ? engine.exportTeam(sets, format) : ""), [engine, modal, sets, format]);
 
   if (id && existing.error === "Team not found") return <NotFoundPage what="team" />;
   if (id && existing.error) return <ErrorBox message={existing.error} />;

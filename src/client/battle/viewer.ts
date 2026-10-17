@@ -5,7 +5,7 @@
 // @pkmn/client keeps track of the battle from the player's side (MIT licence) and @pkmn/view
 // writes the same English messages Pokémon Showdown does (MIT licence).
 
-import { Dex } from "@pkmn/sim";
+import { simLib, isChampionsFormat } from "./simlib";
 import { Generations } from "@pkmn/data";
 import { Battle as Client } from "@pkmn/client";
 import { LogFormatter } from "@pkmn/view";
@@ -55,7 +55,21 @@ const DELAY: Record<string, number> = {
   win: 300,
 };
 
-let gens: Generations | null = null;
+const gensFor = new Map<string, Generations>();
+
+/** Game data for showing the battle: the format's own simulator data. */
+function generations(formatid: string): Generations {
+  const key = isChampionsFormat(formatid) ? "champions" : "sv";
+  let gens = gensFor.get(key);
+  if (!gens) {
+    const Dex = simLib(formatid).Dex;
+    // Champions data lives in its own mod, used for every generation the display asks about.
+    const dex = key === "champions" ? Object.assign(Object.create(Dex), { forGen: () => Dex.mod("champions") }) : Dex;
+    gens = new Generations(dex as any);
+    gensFor.set(key, gens);
+  }
+  return gens;
+}
 
 export class Viewer {
   readonly client: any;
@@ -66,8 +80,11 @@ export class Viewer {
   turn = 0;
   private lastMove: LogEntry | null = null;
 
-  constructor() {
-    gens ??= new Generations(Dex as any);
+  private readonly dex: any;
+
+  constructor(formatid: string) {
+    const gens = generations(formatid);
+    this.dex = simLib(formatid).Dex;
     this.client = new Client(gens as any);
     this.formatter = new LogFormatter("p1", this.client);
   }
@@ -108,7 +125,7 @@ export class Viewer {
     let kind: LogEntry["kind"] = "info";
     if (cmd === "move") {
       kind = "move";
-      const move = Dex.moves.get(args[2]);
+      const move = this.dex.moves.get(args[2]);
       anim = { kind: "move", at, moveType: move.type, category: move.category };
     } else if (cmd === "switch" || cmd === "drag" || cmd === "replace") {
       kind = "switch";
@@ -145,6 +162,14 @@ export class Viewer {
 
 /** Showdown's sprite name for a species, e.g. "rotom-wash", "urshifu-rapidstrike". */
 export function spriteId(species: string): string {
-  const s = Dex.species.get(species);
+  let s = simLib("gen9ou").Dex.species.get(species);
+  // New Champions forms (Garchomp-Mega-Z...) are only in the Champions engine's data.
+  if (!s.exists) {
+    try {
+      s = simLib("gen9champions").Dex.mod("champions").species.get(species);
+    } catch {
+      // That engine isn't loaded, so this isn't a Champions battle.
+    }
+  }
   return s.exists ? s.spriteid : species.toLowerCase().replace(/[^a-z0-9-]+/g, "");
 }

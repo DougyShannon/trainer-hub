@@ -4,7 +4,16 @@
 // is used in (checked by scripts/check-battle-teams.mjs). Later opponents have stronger sets
 // and a smarter computer player.
 
-export type BattleFormatId = "gen9ou" | "gen9doublesou" | "gen9customgame" | "gen9doublescustomgame" | "gen9vgc2025regi";
+import { CHAMPIONS_TEAMS } from "./champions-teams";
+
+export type BattleFormatId =
+  | "gen9ou"
+  | "gen9doublesou"
+  | "gen9customgame"
+  | "gen9doublescustomgame"
+  | "gen9vgc2025regi"
+  | "gen9championsbssregmc"
+  | "gen9championsvgc2026regmc";
 
 export type BattleFormat = { id: BattleFormatId; label: string; doubles: boolean; blurb: string };
 
@@ -15,6 +24,18 @@ export const BATTLE_FORMATS: BattleFormat[] = [
   { id: "gen9customgame", label: "Wild Singles", doubles: false, blurb: "Anything goes, one at a time." },
   { id: "gen9doublescustomgame", label: "Wild Doubles", doubles: true, blurb: "Anything goes, two at a time." },
   { id: "gen9vgc2025regi", label: "VGC 2025 Reg I", doubles: true, blurb: "Official tournament rules: bring 6, pick 4, level 50." },
+  {
+    id: "gen9championsbssregmc",
+    label: "Champions M-C Singles",
+    doubles: false,
+    blurb: "Pokémon Champions Regulation M-C ranked singles: bring 6, pick 3, level 50, Mega Evolution, Stat Points.",
+  },
+  {
+    id: "gen9championsvgc2026regmc",
+    label: "Champions M-C Doubles",
+    doubles: true,
+    blurb: "Pokémon Champions Regulation M-C doubles (VGC 2026): bring 6, pick 4, level 50, Mega Evolution, Stat Points.",
+  },
 ];
 
 export const battleFormat = (id: unknown) => BATTLE_FORMATS.find((f) => f.id === id);
@@ -1156,6 +1177,10 @@ export const battleOpponent = (id: unknown) => BATTLE_OPPONENTS.find((o) => o.id
 
 /** The opponent's team for a format, in Showdown's text format. */
 export function opponentTeam(o: BattleOpponent, format: BattleFormatId): string {
+  // Pokémon Champions has its own Pokémon list and rules, so every opponent has a separate M-C team.
+  const champions = CHAMPIONS_TEAMS[o.id];
+  if (format === "gen9championsbssregmc" && champions) return champions.singles;
+  if (format === "gen9championsvgc2026regmc" && champions) return champions.doubles;
   return typeof o.team === "string" ? o.team : (o.team[format] ?? Object.values(o.team)[0]!);
 }
 

@@ -41,7 +41,7 @@ export function BattleGamePage() {
   const opponent = battleOpponent(opponentId);
   const format = battleFormat(params.get("format"));
   const teamId = params.get("team") ?? "";
-  const { engine, error: engineError } = useBattleEngine();
+  const { engine, error: engineError } = useBattleEngine(format?.id ?? "gen9ou");
   const loan = LOAN_TEAMS.find((l) => l.id === teamId);
   const team = useApi<TeamDetail>(user && teamId && !loan ? `/api/teams/${teamId}` : null, { fresh: true });
   const [round, setRound] = useState(0);
@@ -67,7 +67,7 @@ export function BattleGamePage() {
   if (!engine || (!loan && !team.data)) return <Loading label="Getting the battle ready" />;
 
   const loanFrom = loan ? battleOpponent(loan.from) : null;
-  const sets: object[] = loanFrom ? engine.importTeam(opponentTeam(loanFrom, format.id)) : (team.data?.sets ?? []).map(cleanForSim);
+  const sets: object[] = loanFrom ? engine.importTeam(opponentTeam(loanFrom, format.id), format.id) : (team.data?.sets ?? []).map(cleanForSim);
   const teamName = loan ? loan.name : (team.data?.name ?? "Your team");
   const stadium = params.get("stadium") || opponent.stadium;
 
@@ -162,13 +162,13 @@ function BattleGame({
     const setup = {
       formatid: format.id,
       p1: { name: user.trainerName, team: sets },
-      p2: { name: opponent.name, team: engine.importTeam(opponentTeam(opponent, format.id)) },
+      p2: { name: opponent.name, team: engine.importTeam(opponentTeam(opponent, format.id), format.id) },
       skill: opponent.skill,
     };
     if (saved) {
       try {
         const session = engine.BattleSession.resume(setup, saved.inputLog);
-        const viewer = new engine.Viewer();
+        const viewer = new engine.Viewer(format.id);
         while (viewer.pos < session.lines.length) viewer.step(session.lines[viewer.pos]);
         return { session, viewer, saved, problems: [] as string[] };
       } catch (e) {
@@ -178,7 +178,7 @@ function BattleGame({
     const problems = engine.checkTeam(format.id, sets);
     if (problems.length) return { session: null, viewer: null, saved: null, problems };
     const session = engine.BattleSession.start(setup);
-    return { session, viewer: new engine.Viewer(), saved: null, problems };
+    return { session, viewer: new engine.Viewer(format.id), saved: null, problems };
   });
 
   if (!state.session || !state.viewer) {
@@ -657,8 +657,15 @@ function Controls({
   const me = party[slot];
   const active = req.active[slot];
   if (!me || !active) return null;
-  const teraUsed = filled.some((p) => p.includes("terastallize"));
-  const canTera = !!active.canTerastallize && !teraUsed;
+  // One special power per battle: Terastallizing (Scarlet and Violet) or Mega Evolving (Champions).
+  const gimmick = active.canTerastallize
+    ? { word: "terastallize", label: `Terastallize to ${active.canTerastallize} type` }
+    : active.canMegaEvo
+      ? { word: "mega", label: `Mega Evolve into ${active.canMegaEvo}` }
+      : null;
+  const gimmickUsed = !!gimmick && filled.some((p) => p.endsWith(` ${gimmick.word}`));
+  const canTera = !!gimmick && !gimmickUsed;
+  const suffix = (on: boolean) => (on && gimmick ? ` ${gimmick.word}` : "");
   const bench = benchFor(slot, filled);
   const battle = session.battle;
   const foeActive: any[] = battle.sides[1].active;
@@ -692,7 +699,7 @@ function Controls({
         <h2>Use {m.move} on…</h2>
         <div className="target-grid">
           {targets.map((t) => (
-            <button key={t.n} type="button" className="target-btn" onClick={() => pick(`move ${pending.move + 1} ${t.n}${pending.tera ? " terastallize" : ""}`)}>
+            <button key={t.n} type="button" className="target-btn" onClick={() => pick(`move ${pending.move + 1} ${t.n}${suffix(pending.tera)}`)}>
               {t.species && <ShowdownSprite species={t.species} size={56} still />}
               <span>{t.label}</span>
             </button>
@@ -737,7 +744,7 @@ function Controls({
         {active.moves.map((m, j) => {
           const move = battle.dex.moves.get(m.id);
           const usable = !m.disabled && (m.pp > 0 || !m.maxpp);
-          const estimates = move && move.category !== "Status" ? foeActive.map((_, k) => ({ k, e: est(m.id, k, m.target, tera && canTera) })).filter((x) => x.e) : [];
+          const estimates = move && move.category !== "Status" ? foeActive.map((_, k) => ({ k, e: est(m.id, k, m.target, tera && canTera && gimmick?.word === "terastallize") })).filter((x) => x.e) : [];
           const type = (estimates[0]?.e?.moveType ?? move?.type ?? "Normal").toLowerCase();
           return (
             <button
@@ -748,7 +755,7 @@ function Controls({
               title={move?.shortDesc || move?.desc || ""}
               onClick={() => {
                 if (doubles && TARGETED.has(m.target)) setPending({ move: j, tera: tera && canTera });
-                else pick(`move ${j + 1}${tera && canTera ? " terastallize" : ""}`);
+                else pick(`move ${j + 1}${suffix(tera && canTera)}`);
               }}
             >
               <span className="move-name">{m.move}</span>
@@ -786,7 +793,7 @@ function Controls({
         {canTera && (
           <label className="tera-toggle">
             <input type="checkbox" checked={tera} onChange={(e) => setTera(e.target.checked)} />
-            Terastallize to {active.canTerastallize} type
+            {gimmick!.label}
           </label>
         )}
         {active.trapped && <span className="small muted">{nameOf(me.ident)} can't switch out.</span>}
