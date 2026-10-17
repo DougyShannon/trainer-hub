@@ -6,3 +6,4 @@ export { Lab, type Estimate } from "./lab";
 export { Viewer, spriteId, type Anim, type LogEntry } from "./viewer";
 export type { AccuracyCalc, Calc, DamageCalc, Mod, StatLine } from "./trace";
 export { spriteFor } from "../teams/engine";
+export { loadSimLib } from "./simlib";

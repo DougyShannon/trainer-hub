@@ -16,21 +16,23 @@ export function TeamViewPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { engine, error: engineError } = useEngine();
   const { data: team, error, loading } = useApi<TeamDetail>(`/api/teams/${id}`, { fresh: true });
+  const { engine, error: engineError } = useEngine([team?.format]);
   const [exporting, setExporting] = useState(false);
   const [copyError, setCopyError] = useState<string | null>(null);
 
-  const sets = useMemo(() => (engine && team ? team.sets.map((s) => engine.completeSet(team.format, s)) : []), [engine, team]);
-  const problems = useMemo(() => (engine && team ? engine.validateTeam(sets, team.format) : []), [engine, team, sets]);
+  const sets = useMemo(() => (engine && team && engine.readyFor(team.format) ? team.sets.map((s) => engine.completeSet(team.format, s)) : []), [engine, team]);
+  const problems = useMemo(() => (engine && team && engine.readyFor(team.format) ? engine.validateTeam(sets, team.format) : []), [engine, team, sets]);
 
   if (loading && !team) return <Loading label="Loading team" />;
   if (error === "Team not found") return <NotFoundPage what="team" />;
   if (error || !team) return <ErrorBox message={error ?? "Unknown error"} />;
   if (engineError) return <ErrorBox message={engineError} />;
-  if (!engine) return <Loading label="Loading the Pokémon data" />;
+  if (!engine || !engine.readyFor(team.format)) return <Loading label="Loading the Pokémon data" />;
 
   const info = engine.formatInfo(team.format);
+  const rules = engine.formatRules(team.format);
+  const word = rules.statPoints ? "Stat Points" : "EVs";
   const copy = async () => {
     if (!user) {
       navigate(`/login?next=${encodeURIComponent(`/teams/${team.id}`)}`);
@@ -107,10 +109,12 @@ export function TeamViewPage() {
                   <dt>Ability</dt>
                   <dd>{s.ability || "None"}</dd>
                 </div>
-                <div>
-                  <dt>Tera Type</dt>
-                  <dd>{s.teraType}</dd>
-                </div>
+                {rules.tera && (
+                  <div>
+                    <dt>Tera Type</dt>
+                    <dd>{s.teraType}</dd>
+                  </div>
+                )}
                 <div>
                   <dt>Nature</dt>
                   <dd>{s.nature || "Serious"}</dd>
@@ -127,7 +131,7 @@ export function TeamViewPage() {
                 })}
               </ul>
               <p className="small muted">
-                {evs.length ? `EVs: ${evs.join(" / ")}` : "No EVs"}
+                {evs.length ? `${word}: ${evs.join(" / ")}` : `No ${word}`}
                 {stats && <> · Stats: {STAT_IDS.map((k) => stats[k]).join(" / ")}</>}
               </p>
             </article>
@@ -135,7 +139,7 @@ export function TeamViewPage() {
         })}
       </div>
 
-      {exporting && <ExportTeamModal text={engine.exportTeam(sets)} format={engine.showdownFormatName(team.format)} onClose={() => setExporting(false)} />}
+      {exporting && <ExportTeamModal text={engine.exportTeam(sets, team.format)} format={engine.showdownFormatName(team.format)} onClose={() => setExporting(false)} />}
     </div>
   );
 }

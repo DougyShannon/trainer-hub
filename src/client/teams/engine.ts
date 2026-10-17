@@ -1,9 +1,12 @@
 // The Team Builder's game knowledge: Pokémon, moves, abilities, items, natures, format rules,
 // stat maths and the Showdown text format. It all comes from @pkmn/sim, the browser build of
 // Pokémon Showdown's own simulator (MIT licence), so our legality checks match Showdown's.
+// Pokémon Champions formats (Regulation M-C) use the newer Showdown build in battle/champions,
+// which has Champions' own Pokémon, Mega Stones and Stat Points; `loadFor` downloads it.
 // This file is large, so pages load it on demand with `loadEngine()` rather than importing it.
 
 import { Dex, TeamValidator, Teams, toID } from "@pkmn/sim";
+import { isChampionsFormat, loadSimLib, simLib } from "../battle/simlib";
 import { STAT_IDS, type PokemonSet, type StatID, type StatsTable, type TeamPreview } from "../../shared/team-sets";
 import formSprites from "./form-sprites.json";
 import { DEFAULT_FORMAT, FORMATS, isWild, type FormatInfo } from "./formats";
@@ -13,17 +16,48 @@ export * from "./formats";
 type SimSpecies = ReturnType<typeof Dex.species.get>;
 type SimSet = Parameters<TeamValidator["validateTeam"]>[0] extends (infer T)[] | null ? T : never;
 
+/** Downloads the extra battle engine a format needs (only Champions formats need one). */
+export const loadFor = (formatId: string) => loadSimLib(formatId).then(() => undefined);
+
+/** Whether the data for this format is ready (Champions formats need `loadFor` first). */
+export function readyFor(formatId: string): boolean {
+  try {
+    simLib(formatId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The game data a format uses. Champions has its own Pokémon, moves, learnsets and Mega Stones. */
+function dexFor(formatId: string): typeof Dex {
+  return isChampionsFormat(formatId) ? simLib(formatId).Dex.mod("champions") : Dex;
+}
+
+/** The Champions data, when it has been downloaded. */
+function championsDex(): typeof Dex | null {
+  return readyFor("gen9champions") ? dexFor("gen9champions") : null;
+}
+
+/** Looks a name up in the main data, then in the Champions data (for things like the new Mega Stones). */
+function find<K extends "species" | "moves" | "abilities" | "items">(kind: K, name: string): ReturnType<(typeof Dex)[K]["get"]> {
+  const main = Dex[kind].get(name) as ReturnType<(typeof Dex)[K]["get"]>;
+  if (main.exists) return main;
+  const other = championsDex()?.[kind].get(name) as ReturnType<(typeof Dex)[K]["get"]> | undefined;
+  return other?.exists ? other : main;
+}
+
 export const STAT_LABELS: Record<StatID, string> = { hp: "HP", atk: "Atk", def: "Def", spa: "SpA", spd: "SpD", spe: "Spe" };
 
 export function formatInfo(id: string): FormatInfo {
   const known = FORMATS.find((f) => f.id === id);
   if (known) return known;
-  const f = Dex.formats.get(id);
+  const f = (readyFor(id) ? simLib(id).Dex : Dex).formats.get(id);
   return { id, label: f.exists ? f.name.replace(/^\[Gen 9\] /, "") : id, group: f.gameType === "doubles" ? "Doubles" : "Singles", blurb: "" };
 }
 
 /** Showdown's name for the format, e.g. "[Gen 9] Doubles OU", which is what to pick on Showdown. */
-export const showdownFormatName = (formatId: string) => Dex.formats.get(formatId).name;
+export const showdownFormatName = (formatId: string) => (readyFor(formatId) ? simLib(formatId).Dex : Dex).formats.get(formatId).name;
 
 // ---------------------------------------------------------------------------------------------
 // Rows for the search lists
@@ -59,13 +93,17 @@ const DOUBLES_TIERS = ["DUber", "(DUber)", "DOU", "(DOU)", "DBL", "DUU", "(DUU)"
 
 /** The sprite number PokeAPI uses for this Pokémon (forms such as Alolan Raichu have their own). */
 export function spriteFor(species: string): number {
-  const s = Dex.species.get(species);
+  let s = find("species", species);
+  // Forms newer than the main data (like Champions' Mega Garchomp Z) use their base Pokémon's picture.
+  if ((!s.exists || !Dex.species.get(s.name).exists) && species.includes("-")) s = Dex.species.get(species.slice(0, species.indexOf("-")));
   if (!s.exists) return 0;
   return (formSprites as Record<string, number>)[s.id] ?? Math.max(0, s.num);
 }
 
 type Ctx = {
   id: string;
+  dex: typeof Dex;
+  statPoints: boolean;
   validator: TeamValidator;
   doubles: boolean;
   wild: boolean;
@@ -84,11 +122,16 @@ const contexts = new Map<string, Ctx>();
 function ctx(formatId: string): Ctx {
   let c = contexts.get(formatId);
   if (c) return c;
-  const format = Dex.formats.get(formatId);
-  const validator = new TeamValidator(format.exists ? format : Dex.formats.get(DEFAULT_FORMAT));
+  const lib = simLib(formatId);
+  const format = lib.Dex.formats.get(formatId);
+  const validator: TeamValidator = new lib.TeamValidator(format.exists ? format : Dex.formats.get(DEFAULT_FORMAT));
   const rt = validator.ruleTable;
+  const champions = isChampionsFormat(formatId) && format.exists;
   c = {
     id: formatId,
+    dex: champions ? dexFor(formatId) : Dex,
+    // Champions has Stat Points instead of EVs and IVs: up to 32 in a stat and 66 in total.
+    statPoints: champions,
     validator,
     doubles: format.gameType === "doubles",
     wild: isWild(formatId),
@@ -130,7 +173,7 @@ export function speciesFor(formatId: string): SpeciesRow[] {
   if (c.species) return c.species;
   const lc = c.validator.ruleTable.has("littlecup");
   const out: SpeciesRow[] = [];
-  for (const s of Dex.species.all()) {
+  for (const s of c.dex.species.all()) {
     if (!s.exists || s.num <= 0) continue;
     if (c.wild) {
       if (s.isNonstandard === "CAP" || s.isNonstandard === "Custom") continue;
@@ -147,7 +190,7 @@ export function speciesFor(formatId: string): SpeciesRow[] {
 }
 
 export function speciesRow(formatId: string, name: string): SpeciesRow | null {
-  const s = Dex.species.get(name);
+  const s = ctx(formatId).dex.species.get(name);
   return s.exists ? toSpeciesRow(s, ctx(formatId)) : null;
 }
 
@@ -162,29 +205,33 @@ const toMoveRow = (m: ReturnType<typeof Dex.moves.get>): MoveRow => ({
   desc: m.shortDesc || m.desc,
 });
 
-let allMoveRows: MoveRow[] | null = null;
-function allMoves() {
-  allMoveRows ??= Dex.moves
-    .all()
-    .filter((m) => m.exists && !m.isZ && !m.isMax && m.isNonstandard !== "CAP" && m.isNonstandard !== "Custom" && m.id !== "struggle")
-    .map(toMoveRow)
-    .sort((a, b) => a.name.localeCompare(b.name));
-  return allMoveRows;
+const allMoveRows = new Map<typeof Dex, MoveRow[]>();
+function allMoves(dex: typeof Dex = Dex) {
+  let rows = allMoveRows.get(dex);
+  if (!rows) {
+    rows = dex.moves
+      .all()
+      .filter((m) => m.exists && !m.isZ && !m.isMax && m.isNonstandard !== "CAP" && m.isNonstandard !== "Custom" && m.id !== "struggle")
+      .map(toMoveRow)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    allMoveRows.set(dex, rows);
+  }
+  return rows;
 }
 
 /** The moves this Pokémon can use in the format. In the Wild formats that's every move. */
 export function movesFor(formatId: string, species: string): MoveRow[] {
   const c = ctx(formatId);
   if (c.wild) return allMoves();
-  const s = Dex.species.get(species);
+  const s = c.dex.species.get(species);
   if (!s.exists) return [];
   const cached = c.moves.get(s.id);
   if (cached) return cached;
   const v = c.validator;
   const sources = v.allSources(s);
   const set = fakeSet(s.name);
-  const out = allMoves().filter((row) => {
-    const m = Dex.moves.get(row.id);
+  const out = allMoves(c.dex).filter((row) => {
+    const m = c.dex.moves.get(row.id);
     return !v.checkCanLearn(m, s, sources, set);
   });
   c.moves.set(s.id, out);
@@ -192,7 +239,7 @@ export function movesFor(formatId: string, species: string): MoveRow[] {
 }
 
 export function moveRow(name: string): MoveRow | null {
-  const m = Dex.moves.get(name);
+  const m = find("moves", name);
   return m.exists ? toMoveRow(m) : null;
 }
 
@@ -207,18 +254,18 @@ export function abilitiesFor(formatId: string, species: string): NamedRow[] {
       .sort((a, b) => a.name.localeCompare(b.name));
     return c.allAbilities;
   }
-  const s = Dex.species.get(species);
+  const s = c.dex.species.get(species);
   if (!s.exists) return [];
   return Object.entries(s.abilities)
     .filter(([, name]) => !!name)
     .map(([slot, name]) => {
-      const a = Dex.abilities.get(name as string);
+      const a = c.dex.abilities.get(name as string);
       return { id: a.id, name: a.name, desc: a.shortDesc || a.desc, hidden: slot === "H" };
     });
 }
 
 export function abilityDesc(name: string) {
-  const a = Dex.abilities.get(name);
+  const a = find("abilities", name);
   return a.exists ? a.shortDesc || a.desc : "";
 }
 
@@ -227,7 +274,7 @@ export function itemsFor(formatId: string): NamedRow[] {
   const c = ctx(formatId);
   if (c.items) return c.items;
   const rt = c.validator.ruleTable;
-  c.items = Dex.items
+  c.items = c.dex.items
     .all()
     .filter((i) => {
       if (!i.exists || i.isNonstandard === "CAP" || i.isNonstandard === "Custom") return false;
@@ -241,7 +288,7 @@ export function itemsFor(formatId: string): NamedRow[] {
 }
 
 export function itemDesc(name: string) {
-  const i = Dex.items.get(name);
+  const i = find("items", name);
   return i.exists ? i.shortDesc || i.desc : "";
 }
 
@@ -267,6 +314,10 @@ export function formatRules(formatId: string) {
     levelLocked: c.levelLocked,
     maxLevel: Math.min(100, rt.maxLevel),
     evLimit: c.evLimit,
+    statPoints: c.statPoints,
+    /** The most a trainer can put in one stat: 252 EVs, or 32 Stat Points in Champions. */
+    statMax: c.statPoints ? 32 : 252,
+    tera: !c.statPoints,
     minTeamSize: rt.minTeamSize,
     pickedTeamSize: rt.pickedTeamSize ?? null,
   };
@@ -281,7 +332,7 @@ function defaultAbility(formatId: string, s: SimSpecies): string {
 
 /** A brand-new Pokémon for a team, with the format's level and its first ability filled in. */
 export function newSet(formatId: string, species: string): PokemonSet {
-  const s = Dex.species.get(species);
+  const s = ctx(formatId).dex.species.get(species);
   const rules = formatRules(formatId);
   return {
     name: "",
@@ -301,7 +352,7 @@ export function newSet(formatId: string, species: string): PokemonSet {
 
 /** Fills in anything missing on a set (for example one added from the Pokédex, or an import). */
 export function completeSet(formatId: string, set: Partial<PokemonSet> & { species: string }): PokemonSet {
-  const s = Dex.species.get(set.species);
+  const s = ctx(formatId).dex.species.get(set.species);
   const base = newSet(formatId, s.exists ? s.name : set.species);
   return {
     ...base,
@@ -325,7 +376,8 @@ export function natureOf(name: string): NatureRow | null {
 
 /** The final stats the Pokémon will have in battle, using the game's own formula. */
 export function calcStats(set: PokemonSet, formatId: string): StatsTable | null {
-  const s = Dex.species.get(set.species);
+  const c = ctx(formatId);
+  const s = c.dex.species.get(set.species);
   if (!s.exists) return null;
   const rules = formatRules(formatId);
   const level = rules.levelLocked ? rules.level : set.level;
@@ -333,11 +385,17 @@ export function calcStats(set: PokemonSet, formatId: string): StatsTable | null 
   const out = {} as StatsTable;
   for (const stat of STAT_IDS) {
     const base = s.baseStats[stat];
+    const mod = stat === "hp" ? 1 : nature?.plus === stat && nature.minus !== stat ? 1.1 : nature?.minus === stat && nature.plus !== stat ? 0.9 : 1;
+    if (c.statPoints) {
+      // Champions (always level 50): HP is base + points + 75, the rest (base + points + 20) x nature.
+      const sp = Math.min(32, set.evs[stat]);
+      out[stat] = stat === "hp" ? (base === 1 ? 1 : base + sp + 75) : Math.floor((base + sp + 20) * mod);
+      continue;
+    }
     const core = Math.floor(((2 * base + set.ivs[stat] + Math.floor(set.evs[stat] / 4)) * level) / 100);
     if (stat === "hp") {
       out.hp = base === 1 ? 1 : core + level + 10;
     } else {
-      const mod = nature?.plus === stat && nature.minus !== stat ? 1.1 : nature?.minus === stat && nature.plus !== stat ? 0.9 : 1;
       out[stat] = Math.floor((core + 5) * mod);
     }
   }
@@ -347,9 +405,9 @@ export function calcStats(set: PokemonSet, formatId: string): StatsTable | null 
 // ---------------------------------------------------------------------------------------------
 // Import, export and legality
 
-const toSim = (set: PokemonSet): SimSet =>
+const toSim = (set: PokemonSet, statPoints = false): SimSet =>
   ({
-    name: set.name || Dex.species.get(set.species).baseSpecies || set.species,
+    name: set.name || find("species", set.species).baseSpecies || set.species,
     species: set.species,
     item: set.item,
     ability: set.ability,
@@ -361,29 +419,35 @@ const toSim = (set: PokemonSet): SimSet =>
     level: set.level,
     shiny: set.shiny || undefined,
     happiness: set.happiness,
-    teraType: set.teraType,
+    // Champions has no Terastallizing.
+    teraType: statPoints ? undefined : set.teraType,
   }) as unknown as SimSet;
 
 /** The team as Showdown text, ready to paste into Showdown's teambuilder ("Import from text"). */
-export function exportTeam(sets: PokemonSet[]): string {
-  return Teams.export(
-    sets.map((s) => {
-      const sim = toSim(s) as unknown as Record<string, unknown>;
-      if (!s.name) sim.name = "";
-      return sim;
-    }) as unknown as SimSet[],
-  ).trim();
+export function exportTeam(sets: PokemonSet[], formatId: string): string {
+  const c = ctx(formatId);
+  return simLib(formatId)
+    .Teams.export(
+      sets.map((s) => {
+        const sim = toSim(s, c.statPoints) as unknown as Record<string, unknown>;
+        if (!s.name) sim.name = "";
+        return sim;
+      }) as unknown as SimSet[],
+      { useStatPoints: c.statPoints },
+    )
+    .trim();
 }
 
 export type ImportResult = { sets: PokemonSet[]; problems: string[] };
 
 /** Reads Showdown text (one Pokémon or a whole team). Unknown Pokémon are skipped and reported. */
 export function importTeam(text: string, formatId: string): ImportResult {
-  const parsed = Teams.import(text.trim()) ?? [];
+  const dex = ctx(formatId).dex;
+  const parsed: NonNullable<ReturnType<typeof Teams.import>> = simLib(formatId).Teams.import(text.trim()) ?? [];
   const sets: PokemonSet[] = [];
   const problems: string[] = [];
   for (const p of parsed) {
-    const s = Dex.species.get(p.species || p.name);
+    const s = dex.species.get(p.species || p.name);
     if (!s.exists) {
       problems.push(`We don't know a Pokémon called “${p.species || p.name}”, so it was left out.`);
       continue;
@@ -393,9 +457,9 @@ export function importTeam(text: string, formatId: string): ImportResult {
       completeSet(formatId, {
         name: nick,
         species: s.name,
-        item: p.item ? Dex.items.get(p.item).name || p.item : "",
-        ability: p.ability ? Dex.abilities.get(p.ability).name || p.ability : "",
-        moves: (p.moves ?? []).map((m) => Dex.moves.get(m).name || m),
+        item: p.item ? dex.items.get(p.item).name || p.item : "",
+        ability: p.ability ? dex.abilities.get(p.ability).name || p.ability : "",
+        moves: (p.moves ?? []).map((m) => dex.moves.get(m).name || m),
         nature: p.nature ? Dex.natures.get(p.nature).name || "" : "",
         gender: p.gender === "M" || p.gender === "F" ? p.gender : "",
         evs: p.evs as StatsTable | undefined,
@@ -419,7 +483,7 @@ export function validateTeam(sets: PokemonSet[], formatId: string): string[] {
   if (!sets.length) return [];
   const c = ctx(formatId);
   try {
-    return c.validator.validateTeam(sets.map(toSim)) ?? [];
+    return c.validator.validateTeam(sets.map((s) => toSim(s, c.statPoints))) ?? [];
   } catch (err) {
     return [`The rules check hit a problem: ${(err as Error).message}`];
   }
@@ -457,7 +521,7 @@ export type Matchup = "immune" | "resist" | "neutral" | "weak";
 
 /** How one Pokémon takes a hit of this type, counting abilities such as Levitate. */
 export function matchup(attackType: string, set: PokemonSet): { result: Matchup; multiplier: number } {
-  const s = Dex.species.get(set.species);
+  const s = find("species", set.species);
   if (!s.exists) return { result: "neutral", multiplier: 1 };
   const ability = toID(set.ability);
   if (!Dex.getImmunity(attackType, s.types) || ABILITY_IMMUNE[ability]?.includes(attackType)) return { result: "immune", multiplier: 0 };
@@ -488,22 +552,22 @@ export type Engine = typeof import("./engine");
 /** Whether this Pokémon can learn this move in the format (for the "learns a move" filter). */
 export function canLearn(formatId: string, species: string, move: string): boolean {
   const c = ctx(formatId);
-  const m = Dex.moves.get(move);
+  const m = c.dex.moves.get(move);
   if (!m.exists) return false;
   if (c.wild) return true;
-  const s = Dex.species.get(species);
+  const s = c.dex.species.get(species);
   return !c.validator.checkCanLearn(m, s, c.validator.allSources(s), fakeSet(s.name));
 }
 
 /** "M", "F" or "N" when the Pokémon's gender is fixed, or null when the trainer can choose. */
 export function fixedGender(species: string): "M" | "F" | "N" | null {
-  const s = Dex.species.get(species);
+  const s = find("species", species);
   return s.exists && s.gender ? (s.gender as "M" | "F" | "N") : null;
 }
 
 /** Finds a Pokémon by name, falling back to its National Dex number (for names from the Pokédex pages). */
 export function resolveSpecies(name: string, num = 0): string | null {
-  const s = Dex.species.get(name);
+  const s = find("species", name);
   if (s.exists) return s.name;
   const byNum = num > 0 ? Dex.species.all().find((x) => x.num === num && !x.forme) : undefined;
   return byNum?.name ?? null;

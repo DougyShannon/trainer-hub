@@ -7,13 +7,18 @@ export type BattleEngine = typeof import("./engine");
 let loading: Promise<BattleEngine> | null = null;
 export const loadBattleEngine = () => (loading ??= import("./engine"));
 
-export function useBattleEngine(): { engine: BattleEngine | null; error: string | null } {
+/** The battle engine, plus the simulator `formatid` needs (Champions formats have their own). */
+export function useBattleEngine(formatid: string): { engine: BattleEngine | null; error: string | null } {
   const [engine, setEngine] = useState<BattleEngine | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
+    setEngine(null);
     loadBattleEngine()
-      .then((e) => live && setEngine(e))
+      .then(async (e) => {
+        await e.loadSimLib(formatid);
+        if (live) setEngine(e);
+      })
       .catch(() => {
         loading = null;
         if (live) setError("The battle engine didn't download. Check your connection and refresh.");
@@ -21,6 +26,6 @@ export function useBattleEngine(): { engine: BattleEngine | null; error: string 
     return () => {
       live = false;
     };
-  }, []);
+  }, [formatid]);
   return { engine, error };
 }

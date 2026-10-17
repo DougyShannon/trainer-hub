@@ -2,7 +2,7 @@
 // is faster. The move buttons use it to show damage ranges, and the computer player uses it to
 // choose. Working on a copy means nothing here can change the real battle.
 
-import { Battle, Dex, Pokemon, Side, State } from "@pkmn/sim";
+import { simLib, type SimLib } from "./simlib";
 import { installTracer, type DamageCalc } from "./trace";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -34,20 +34,21 @@ export type Ref = { side: number; index: number };
  * Minifying the site renames classes (Pokemon becomes something like "Ue"), so the copy came back
  * with broken links. Putting the real names back keeps copies working in the live site.
  */
-let named = false;
-function nameClasses(battle: Sim) {
-  if (named) return;
-  named = true;
+const named = new Set<SimLib>();
+function nameClasses(lib: SimLib, battle: Sim) {
+  if (named.has(lib)) return;
+  named.add(lib);
+  const { Battle, Dex, Pokemon, Side } = lib;
   const classes: [unknown, string][] = [
     [Battle, "Battle"],
     [battle.field.constructor, "Field"],
     [Side, "Side"],
     [Pokemon, "Pokemon"],
-    [(Dex as Sim).Condition, "Condition"],
-    [(Dex as Sim).Ability, "Ability"],
-    [(Dex as Sim).Item, "Item"],
-    [(Dex as Sim).Move, "Move"],
-    [(Dex as Sim).Species, "Species"],
+    [Dex.Condition, "Condition"],
+    [Dex.Ability, "Ability"],
+    [Dex.Item, "Item"],
+    [Dex.Move, "Move"],
+    [Dex.Species, "Species"],
   ];
   for (const [cls, name] of classes) {
     if (typeof cls === "function" && cls.name !== name) Object.defineProperty(cls, "name", { value: name });
@@ -59,8 +60,9 @@ export class Lab {
   private last: DamageCalc | null = null;
 
   constructor(live: Sim) {
-    nameClasses(live);
-    this.battle = State.deserializeBattle(State.serializeBattle(live));
+    const lib = simLib(live.format.id);
+    nameClasses(lib, live);
+    this.battle = lib.State.deserializeBattle(lib.State.serializeBattle(live));
     this.battle.restart(() => {});
     installTracer(this.battle, (calc) => {
       if (calc.kind === "damage") this.last = calc;

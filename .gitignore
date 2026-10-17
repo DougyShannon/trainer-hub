@@ -4,3 +4,6 @@ dist/
 .dev.vars
 data/
 *.log
+scripts/champions-engine/ps/
+scripts/champions-engine/ps-data.ts
+scripts/champions-engine/ps-teams.mjs

@@ -2,7 +2,7 @@
 // The player is always "p1"; the computer is "p2". The page reads `lines` (the battle log from the
 // player's point of view) and `request` (what the player has to choose next).
 
-import { Battle, Teams, TeamValidator } from "@pkmn/sim";
+import { simLib } from "./simlib";
 import { installTracer, type Calc } from "./trace";
 import { chooseFor } from "./ai";
 import type { AiSkill } from "../../shared/battle/opponents";
@@ -30,6 +30,8 @@ export type Request = {
     trapped?: boolean;
     maybeTrapped?: boolean;
     canTerastallize?: string;
+    /** Champions: the Mega Evolution this Pokémon can turn into this turn. */
+    canMegaEvo?: string;
   }[];
   side: {
     name: string;
@@ -66,7 +68,7 @@ export class BattleSession {
   private constructor(readonly setup: SessionSetup, replay?: string[]) {
     const start = replay?.find((l) => l.startsWith(">start "));
     const startOpts = start ? JSON.parse(start.slice(7)) : { formatid: setup.formatid };
-    this.battle = new Battle({ ...startOpts, send: (type: string, data: unknown) => this.receive(type, data) });
+    this.battle = new (simLib(startOpts.formatid ?? setup.formatid).Battle)({ ...startOpts, send: (type: string, data: unknown) => this.receive(type, data) });
     installTracer(this.battle, (calc) => this.calcs.push(calc) - 1);
     if (replay) {
       this.replaying = true;
@@ -210,12 +212,12 @@ export class BattleSession {
 }
 
 /** Reads a Showdown text team. */
-export const importTeam = (text: string) => Teams.import(text) ?? [];
+export const importTeam = (text: string, formatid = "gen9ou") => simLib(formatid).Teams.import(text) ?? [];
 
 /** Problems that stop a team being used in a format (empty when it's fine). */
 export function checkTeam(formatid: string, team: object[]): string[] {
   try {
-    return TeamValidator.get(formatid).validateTeam(team as never) ?? [];
+    return simLib(formatid).TeamValidator.get(formatid).validateTeam(team as never) ?? [];
   } catch (e) {
     return [(e as Error).message];
   }

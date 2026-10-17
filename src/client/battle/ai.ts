@@ -114,6 +114,7 @@ function moveTurn(battle: Sim, side: Sim, req: Sim, skill: AiSkill): string {
   const assigned = new Map<number, number>(); // expected damage already aimed at each foe slot this turn
   const switchedTo = new Set<number>();
   let teraUsed = false;
+  let megaUsed = false;
   const parts: string[] = [];
 
   req.active.forEach((active: Sim, slot: number) => {
@@ -200,7 +201,13 @@ function moveTurn(battle: Sim, side: Sim, req: Sim, skill: AiSkill): string {
     if (pick.tera) teraUsed = true;
     if (pick.choice.startsWith("switch")) switchedTo.add(Number(pick.choice.split(" ")[1]) - 1);
     if (pick.target !== undefined && pick.dealt) assigned.set(pick.target, (assigned.get(pick.target) ?? 0) + pick.dealt);
-    parts.push(pick.choice);
+    // Champions: a Pokémon that can Mega Evolve always does (only one per side, once a battle).
+    let choice = pick.choice;
+    if (choice.startsWith("move") && active.canMegaEvo && !megaUsed) {
+      choice += " mega";
+      megaUsed = true;
+    }
+    parts.push(choice);
   });
   return parts.join(", ");
 }

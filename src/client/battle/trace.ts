@@ -332,6 +332,7 @@ export function installTracer(battle: Sim, onCalc: (calc: Calc) => number) {
     const t = trace;
     const b = this.battle;
     const tr = b.trunc;
+    const champions = String(b.dex.currentMod).startsWith("champions");
     if (t) {
       t.calc.baseDamage = baseDamage;
       // The final power is the BasePower event's result, after the Tera 60-power floor.
@@ -409,11 +410,12 @@ export function installTracer(battle: Sim, onCalc: (calc: Calc) => number) {
     typeMod = b.clampIntRange(typeMod, -6, 6);
     target.getMoveHitData(move).typeMod = typeMod;
     if (typeMod > 0) {
-      if (!suppressMessages) b.add("-supereffective", target);
+      // Champions also says how effective (doubly super effective shows as 2).
+      if (!suppressMessages) champions ? b.add("-supereffective", target, Math.min(typeMod, 2)) : b.add("-supereffective", target);
       for (let i = 0; i < typeMod; i++) baseDamage *= 2;
     }
     if (typeMod < 0) {
-      if (!suppressMessages) b.add("-resisted", target);
+      if (!suppressMessages) champions ? b.add("-resisted", target, Math.min(-typeMod, 2)) : b.add("-resisted", target);
       for (let i = 0; i > typeMod; i--) baseDamage = tr(baseDamage / 2);
     }
     if (isCrit && !suppressMessages) b.add("-crit", target);
