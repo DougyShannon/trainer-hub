@@ -73,6 +73,36 @@ export class Lab {
     this.battle.hint = () => {};
   }
 
+  /**
+   * Whether the move can't touch the target at all, checked the way the battle checks before a hit:
+   * type immunity (and Levitate or Air Balloon against Ground), Prankster and powder moves, the
+   * move's own rules, then the target's ability (Wonder Guard, Volt Absorb, Flash Fire, Sap Sipper,
+   * Soundproof and the rest). Damage alone misses the ability checks, which made Wonder Guard
+   * look like it took damage.
+   */
+  private immune(source: Sim, target: Sim, move: Sim): boolean {
+    const b = this.battle;
+    if (!b.actions.hitStepTypeImmunity([target], source, move)[0]) return true;
+    if (!b.actions.hitStepTryImmunity([target], source, move)[0]) return true;
+    if (target === source || target.ignoringAbility()) return false;
+    const ability = target.getAbility();
+    // Mold Breaker and friends get past abilities like Wonder Guard.
+    if (move.ignoreAbility && ability.flags?.breakable) return false;
+    // Absorbing abilities heal or boost as they block; switch that off so the copy stays as it was.
+    const { heal, boost } = b;
+    const { addVolatile } = target;
+    b.heal = b.boost = () => false;
+    target.addVolatile = () => false;
+    try {
+      const result = b.singleEvent("TryHit", ability, target.abilityState, target, source, move);
+      return result === null || result === false;
+    } finally {
+      b.heal = heal;
+      b.boost = boost;
+      target.addVolatile = addVolatile;
+    }
+  }
+
   mon(ref: Ref): Sim {
     return this.battle.sides[ref.side].pokemon[ref.index];
   }
@@ -95,8 +125,9 @@ export class Lab {
       move = b.runEvent("ModifyMove", source, target, move, move) || move;
       const priority = b.runEvent("ModifyPriority", source, target, move, move.priority) ?? move.priority;
       const accuracy = this.accuracy(source, target, move);
-      if (move.category === "Status") {
-        return { min: 0, max: 0, minPct: 0, maxPct: 0, hits: [1, 1], immune: !target.runImmunity(move), accuracy, calc: null, moveType: move.type, category: move.category, priority };
+      const immune = this.immune(source, target, move);
+      if (move.category === "Status" || immune) {
+        return { min: 0, max: 0, minPct: 0, maxPct: 0, hits: [1, 1], immune, accuracy, calc: null, moveType: move.type, category: move.category, priority };
       }
       move.willCrit = false;
       if (opts.spread) move.spreadHit = true;
