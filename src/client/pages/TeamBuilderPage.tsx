@@ -597,6 +597,12 @@ function SetEditor({
             <input id="set-shiny" type="checkbox" checked={set.shiny} onChange={(e) => onChange({ ...set, shiny: e.target.checked })} />
             Shiny
           </label>
+          {rules.wild && engine.canGigantamax(set.species) && (
+            <label className="check" title="When it Dynamaxes in battle it turns into its Gigantamax form and gets its own G-Max Move.">
+              <input id="set-gmax" type="checkbox" checked={!!set.gigantamax} onChange={(e) => onChange({ ...set, gigantamax: e.target.checked || undefined })} />
+              Gigantamax
+            </label>
+          )}
         </div>
         {row && (
           <Link to={`/pokedex/${row.num}`} className="small">

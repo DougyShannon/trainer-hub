@@ -1412,6 +1412,8 @@ button.guide-mark { border: 0; font-family: inherit; }
 .field-sprite { width: auto; height: 78%; max-height: 200px; image-rendering: pixelated; object-fit: contain; filter: drop-shadow(0 4px 2px rgb(0 0 0 / 25%)); }
 .field-spot.mine .field-sprite { height: 92%; max-height: 240px; }
 .field-sprite.mirrored { transform: scaleX(-1); }
+.field-mon.dynamax { transform: scale(1.5); transform-origin: 50% 100%; transition: transform 0.4s ease-out; }
+.field-mon.dynamax .field-sprite { filter: drop-shadow(0 0 10px rgb(255 40 90 / 85%)) drop-shadow(0 0 22px rgb(255 40 90 / 50%)); }
 .sprite-missing { display: inline-block; }
 .field-mon.gone { opacity: 0; transform: translateY(30%); transition: opacity 0.5s, transform 0.5s; }
 

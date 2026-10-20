@@ -108,16 +108,26 @@ export class Lab {
   }
 
   /** Damage `moveId` would do from one Pokémon to another right now. */
-  damage(attacker: Ref, defender: Ref, moveId: string, opts: { tera?: boolean; spread?: boolean } = {}): Estimate | null {
+  damage(attacker: Ref, defender: Ref, moveId: string, opts: { tera?: boolean; spread?: boolean; zmove?: boolean; dynamax?: boolean } = {}): Estimate | null {
     const b = this.battle;
     const source = this.mon(attacker);
     const target = this.mon(defender);
     if (!source || !target || target.fainted) return null;
     const savedTera = source.terastallized;
     if (opts.tera && source.teraType && !source.terastallized) source.terastallized = source.teraType;
+    // Max Moves only have power while Dynamaxed, so pretend for this sum.
+    const pretendDynamax = !!opts.dynamax && !source.volatiles.dynamax;
+    if (pretendDynamax) source.volatiles.dynamax = { id: "dynamax" };
     try {
       let move = b.dex.getActiveMove(moveId);
       if (!move.exists && !move.id) return null;
+      // Z-Moves and Max Moves take their power from the move they're made from.
+      if (opts.zmove) {
+        if (!b.actions.getZMove(move, source, true)) return null;
+        move = b.actions.getActiveZMove(move, source);
+      } else if (opts.dynamax || source.volatiles?.dynamax) {
+        move = b.actions.getActiveMaxMove(move, source);
+      }
       b.activeMove = null;
       b.singleEvent("ModifyType", move, null, source, target, move, move);
       b.singleEvent("ModifyMove", move, null, source, target, move, move);
@@ -158,6 +168,7 @@ export class Lab {
       return null;
     } finally {
       source.terastallized = savedTera;
+      if (pretendDynamax) delete source.volatiles.dynamax;
     }
   }
 
