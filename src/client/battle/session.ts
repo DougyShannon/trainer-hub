@@ -10,6 +10,26 @@ import type { AiSkill } from "../../shared/battle/opponents";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Sim = any;
 
+/**
+ * The Wild formats bring back Dynamax (from Sword and Shield). Showdown only allows Dynamax in
+ * generation 8 battles, so for these formats each side starts with its Dynamax unused and the
+ * once-a-battle check is taught to allow it. Z-Moves need nothing extra: any Pokémon holding a
+ * Z-Crystal can use one in any generation.
+ */
+const DYNAMAX_FORMATS = new Set(["gen9customgame", "gen9doublescustomgame"]);
+export const hasDynamax = (formatid: string) => DYNAMAX_FORMATS.has(formatid);
+
+const taught = new Set<unknown>();
+function allowDynamax(SideClass: Sim) {
+  if (taught.has(SideClass)) return;
+  taught.add(SideClass);
+  const original = SideClass.prototype.canDynamaxNow;
+  SideClass.prototype.canDynamaxNow = function (this: Sim) {
+    if (this.battle.gen === 9 && hasDynamax(this.battle.format.id) && this.battle.gameType !== "multi") return !this.dynamaxUsed;
+    return original.call(this);
+  };
+}
+
 export type Side = { name: string; team: string | object[] };
 
 export type SessionSetup = {
@@ -32,6 +52,12 @@ export type Request = {
     canTerastallize?: string;
     /** Champions: the Mega Evolution this Pokémon can turn into this turn. */
     canMegaEvo?: string;
+    /** Wild formats: the Z-Move each move slot becomes (null where there isn't one). */
+    canZMove?: ({ move: string; target: string } | null)[];
+    /** Wild formats: this Pokémon can Dynamax this turn. */
+    canDynamax?: boolean;
+    /** The Max Moves this Pokémon has while Dynamaxed (or would have). */
+    maxMoves?: { maxMoves: { move: string; target: string; disabled?: boolean }[]; gigantamax?: string };
   }[];
   side: {
     name: string;
@@ -68,7 +94,17 @@ export class BattleSession {
   private constructor(readonly setup: SessionSetup, replay?: string[]) {
     const start = replay?.find((l) => l.startsWith(">start "));
     const startOpts = start ? JSON.parse(start.slice(7)) : { formatid: setup.formatid };
-    this.battle = new (simLib(startOpts.formatid ?? setup.formatid).Battle)({ ...startOpts, send: (type: string, data: unknown) => this.receive(type, data) });
+    const lib = simLib(startOpts.formatid ?? setup.formatid);
+    allowDynamax(lib.Side);
+    this.battle = new lib.Battle({ ...startOpts, send: (type: string, data: unknown) => this.receive(type, data) });
+    if (hasDynamax(this.battle.format.id)) {
+      // Both players' Dynamax starts unused, set just before the battle sends its first choices.
+      const start = this.battle.start;
+      this.battle.start = function (this: Sim, ...args: unknown[]) {
+        for (const side of this.sides) if (side) side.dynamaxUsed = false;
+        return start.apply(this, args);
+      };
+    }
     installTracer(this.battle, (calc) => this.calcs.push(calc) - 1);
     if (replay) {
       this.replaying = true;

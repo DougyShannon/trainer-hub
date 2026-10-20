@@ -421,6 +421,7 @@ const toSim = (set: PokemonSet, statPoints = false): SimSet =>
     happiness: set.happiness,
     // Champions has no Terastallizing.
     teraType: statPoints ? undefined : set.teraType,
+    gigantamax: set.gigantamax || undefined,
   }) as unknown as SimSet;
 
 /** The team as Showdown text, ready to paste into Showdown's teambuilder ("Import from text"). */
@@ -468,6 +469,7 @@ export function importTeam(text: string, formatId: string): ImportResult {
         shiny: !!p.shiny,
         happiness: typeof p.happiness === "number" && p.happiness !== 255 ? p.happiness : undefined,
         teraType: p.teraType || "",
+        gigantamax: p.gigantamax || undefined,
       }),
     );
   }
@@ -557,6 +559,11 @@ export function canLearn(formatId: string, species: string, move: string): boole
   if (c.wild) return true;
   const s = c.dex.species.get(species);
   return !c.validator.checkCanLearn(m, s, c.validator.allSources(s), fakeSet(s.name));
+}
+
+/** Whether this Pokémon has a Gigantamax form (used in the Wild formats, which allow Dynamax). */
+export function canGigantamax(species: string): boolean {
+  return !!find("species", species).canGigantamax;
 }
 
 /** "M", "F" or "N" when the Pokémon's gender is fixed, or null when the trainer can choose. */

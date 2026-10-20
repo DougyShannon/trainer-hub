@@ -2,7 +2,8 @@
 // damage with the real damage formula (on a scratch copy of the battle, see lab.ts) and scores it:
 // knock-outs, accuracy, priority, and rough values for status moves like Stealth Rock, setup moves
 // and recovery. Skill 1 makes plenty of mistakes; skill 2 plays its best move most of the time;
-// skill 3 also switches out of bad match-ups, Terastallizes at good moments and focuses fire.
+// skill 3 also switches out of bad match-ups, Terastallizes (or uses a Z-Move or Dynamax in the
+// Wild formats) at good moments and focuses fire.
 
 import { Lab, type Ref } from "./lab";
 import type { AiSkill } from "../../shared/battle/opponents";
@@ -10,7 +11,7 @@ import type { AiSkill } from "../../shared/battle/opponents";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Sim = any;
 
-type Option = { choice: string; score: number; target?: number; dealt?: number; tera?: boolean };
+type Option = { choice: string; score: number; target?: number; dealt?: number; power?: string };
 
 const TARGETED = new Set(["normal", "any", "adjacentFoe", "adjacentAlly", "adjacentAllyOrSelf"]);
 const SPREAD = new Set(["allAdjacentFoes", "allAdjacent"]);
@@ -113,7 +114,7 @@ function moveTurn(battle: Sim, side: Sim, req: Sim, skill: AiSkill): string {
   const foe = side.foe;
   const assigned = new Map<number, number>(); // expected damage already aimed at each foe slot this turn
   const switchedTo = new Set<number>();
-  let teraUsed = false;
+  const powersUsed = new Set<string>();
   let megaUsed = false;
   const parts: string[] = [];
 
@@ -145,15 +146,22 @@ function moveTurn(battle: Sim, side: Sim, req: Sim, skill: AiSkill): string {
         }
         return;
       }
-      const tryTera = [false];
-      if (active.canTerastallize && !teraUsed && skill >= 2) tryTera.push(true);
-      for (const tera of tryTera) {
+      // Each special power is worth trying with each move: Tera, a Z-Move or Dynamax.
+      const tryPower: (string | undefined)[] = [undefined];
+      if (skill >= 2) {
+        if (active.canTerastallize && !powersUsed.has("terastallize")) tryPower.push("terastallize");
+        if (active.canZMove?.[j] && !powersUsed.has("zmove")) tryPower.push("zmove");
+        if (active.canDynamax && !powersUsed.has("dynamax")) tryPower.push("dynamax");
+      }
+      for (const power of tryPower) {
+        const opts = { tera: power === "terastallize", zmove: power === "zmove", dynamax: power === "dynamax" };
+        const word = power ? ` ${power}` : "";
         if (SPREAD.has(m.target) || !doubles || !TARGETED.has(m.target)) {
           // Hits every foe (or the only one): add up the value on each, minus any hit on our partner.
           let score = 0;
           let dealtTo: number | undefined;
           for (const { f, k } of foes) {
-            const est = lab.damage(meRef, refOf(foe, f), m.id, { tera, spread: doubles && SPREAD.has(m.target) && foes.length > 1 });
+            const est = lab.damage(meRef, refOf(foe, f), m.id, { ...opts, spread: doubles && SPREAD.has(m.target) && foes.length > 1 });
             score += damageScore(est, f, assigned.get(k) ?? 0, me, move);
             if (!doubles || !SPREAD.has(m.target)) {
               dealtTo = k;
@@ -163,17 +171,17 @@ function moveTurn(battle: Sim, side: Sim, req: Sim, skill: AiSkill): string {
           if (doubles && m.target === "allAdjacent") {
             for (const ally of side.active) {
               if (!ally || ally === me || ally.fainted) continue;
-              const est = lab.damage(meRef, refOf(side, ally), m.id, { tera, spread: true });
+              const est = lab.damage(meRef, refOf(side, ally), m.id, { ...opts, spread: true });
               if (est && !est.immune) score -= Math.min(1, (est.minPct + est.maxPct) / 2) * 0.8;
             }
           }
-          options.push({ choice: `move ${j + 1}${tera ? " terastallize" : ""}`, score: score + (tera ? teraBonus(me, score, skill) : 0), target: dealtTo, tera });
+          options.push({ choice: `move ${j + 1}${word}`, score: score + powerBonus(power, me, side, score, skill), target: dealtTo, power });
         } else {
           for (const { f, k } of foes) {
-            const est = lab.damage(meRef, refOf(foe, f), m.id, { tera });
+            const est = lab.damage(meRef, refOf(foe, f), m.id, opts);
             const score = damageScore(est, f, assigned.get(k) ?? 0, me, move);
             const dealt = est ? ((est.min + est.max) / 2) * ((est.hits[0] + est.hits[1]) / 2) : 0;
-            options.push({ choice: `move ${j + 1} ${k + 1}${tera ? " terastallize" : ""}`, score: score + (tera ? teraBonus(me, score, skill) : 0), target: k, dealt, tera });
+            options.push({ choice: `move ${j + 1} ${k + 1}${word}`, score: score + powerBonus(power, me, side, score, skill), target: k, dealt, power });
           }
         }
       }
@@ -198,7 +206,7 @@ function moveTurn(battle: Sim, side: Sim, req: Sim, skill: AiSkill): string {
       return;
     }
     const pick = pickOption(options, skill);
-    if (pick.tera) teraUsed = true;
+    if (pick.power) powersUsed.add(pick.power);
     if (pick.choice.startsWith("switch")) switchedTo.add(Number(pick.choice.split(" ")[1]) - 1);
     if (pick.target !== undefined && pick.dealt) assigned.set(pick.target, (assigned.get(pick.target) ?? 0) + pick.dealt);
     // Champions: a Pokémon that can Mega Evolve always does (only one per side, once a battle).
@@ -244,6 +252,21 @@ function damageScore(est: ReturnType<Lab["damage"]>, target: Sim, alreadyAimed: 
   if (move.flags?.charge && !me.volatiles?.[move.id]) score *= move.id === "solarbeam" || move.id === "electroshot" ? 0.8 : 0.5;
   if (move.selfSwitch) score += 0.05;
   return score;
+}
+
+function powerBonus(power: string | undefined, me: Sim, side: Sim, score: number, skill: AiSkill): number {
+  if (power === "terastallize") return teraBonus(me, score, skill);
+  if (power === "zmove") {
+    // A Z-Move is a one-off big hit: save it for a knock-out or a last stand.
+    if (skill === 3) return score >= 1 || hpFrac(me) < 0.35 ? 0.1 : -0.25;
+    return Math.random() < 0.3 ? 0.05 : -0.25;
+  }
+  if (power === "dynamax") {
+    // Dynamax doubles HP for three turns, so it's best on a healthy Pokémon, or the last one left.
+    if (skill === 3) return hpFrac(me) > 0.7 || alive(side) === 1 ? 0.2 : -0.4;
+    return Math.random() < 0.3 ? 0.1 : -0.3;
+  }
+  return 0;
 }
 
 function teraBonus(me: Sim, score: number, skill: AiSkill): number {

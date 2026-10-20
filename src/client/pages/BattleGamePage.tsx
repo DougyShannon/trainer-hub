@@ -325,6 +325,7 @@ function BattleScreen({
       status: p.status ?? "",
       fainted: !!p.fainted || p.hp <= 0,
       tera: p.terastallized ?? "",
+      dynamax: !!p.volatiles?.dynamax,
       boosts: Object.entries(p.boosts ?? {}).filter(([, v]) => v) as [string, number][],
       volatiles: Object.keys(p.volatiles ?? {})
         .map((v) => VOLATILE_LABEL[v])
@@ -596,8 +597,8 @@ function Controls({
   onChoose: (choice: string) => void;
 }) {
   const [picks, setPicks] = useState<string[]>([]);
-  const [pending, setPending] = useState<{ move: number; tera: boolean } | null>(null);
-  const [tera, setTera] = useState(false);
+  const [pending, setPending] = useState<{ move: number; power: string | null; target: string } | null>(null);
+  const [power, setPower] = useState<string | null>(null);
   const sent = useRef(false);
   const party = req.side.pokemon;
   const activeCount = doubles ? 2 : 1;
@@ -631,7 +632,7 @@ function Controls({
   const pick = (choice: string) => {
     setPicks([...picks, ...filled.slice(picks.length), choice]);
     setPending(null);
-    setTera(false);
+    setPower(null);
   };
 
   // ---- Team preview ----
@@ -657,20 +658,24 @@ function Controls({
   const me = party[slot];
   const active = req.active[slot];
   if (!me || !active) return null;
-  // One special power per battle: Terastallizing (Scarlet and Violet) or Mega Evolving (Champions).
-  const gimmick = active.canTerastallize
-    ? { word: "terastallize", label: `Terastallize to ${active.canTerastallize} type` }
-    : active.canMegaEvo
-      ? { word: "mega", label: `Mega Evolve into ${active.canMegaEvo}` }
-      : null;
-  const gimmickUsed = !!gimmick && filled.some((p) => p.endsWith(` ${gimmick.word}`));
-  const canTera = !!gimmick && !gimmickUsed;
-  const suffix = (on: boolean) => (on && gimmick ? ` ${gimmick.word}` : "");
+  // Special powers, each once per battle: Terastallizing (Scarlet and Violet), Mega Evolving
+  // (Champions), and Z-Moves and Dynamax (Wild formats). One can be picked for each move.
+  const powers: { word: string; label: string }[] = [];
+  if (active.canTerastallize) powers.push({ word: "terastallize", label: `Terastallize to ${active.canTerastallize} type` });
+  if (active.canMegaEvo) powers.push({ word: "mega", label: `Mega Evolve into ${active.canMegaEvo}` });
+  if (active.canZMove) powers.push({ word: "zmove", label: "Use a Z-Move" });
+  if (active.canDynamax) powers.push({ word: "dynamax", label: active.maxMoves?.gigantamax ? `Gigantamax (${active.maxMoves.gigantamax})` : "Dynamax" });
+  // A partner already picked this turn may have used one.
+  const open = powers.filter((p) => !filled.some((c) => c.endsWith(` ${p.word}`)));
+  const on = open.some((p) => p.word === power) ? power : null;
+  const suffix = (word: string | null) => (word ? ` ${word}` : "");
+  // Dynamaxed already, or about to: the moves become Max Moves.
+  const maxed = on === "dynamax" || (!!active.maxMoves && !active.canDynamax);
   const bench = benchFor(slot, filled);
   const battle = session.battle;
   const foeActive: any[] = battle.sides[1].active;
 
-  const est = (moveId: string, foeSlot: number, target: string, withTera: boolean): Estimate | null => {
+  const est = (moveId: string, foeSlot: number, target: string, word: string | null): Estimate | null => {
     if (!lab) return null;
     const foe = foeActive[foeSlot];
     if (!foe || foe.fainted) return null;
@@ -679,12 +684,12 @@ function Controls({
       { side: 0, index: slot },
       { side: 1, index: battle.sides[1].pokemon.indexOf(foe) },
       moveId,
-      { tera: withTera, spread: doubles && SPREAD.has(target) && foesUp > 1 },
+      { tera: word === "terastallize", zmove: word === "zmove", dynamax: word === "dynamax", spread: doubles && SPREAD.has(target) && foesUp > 1 },
     );
   };
 
   if (pending) {
-    const m = active.moves[pending.move];
+    const m = { ...active.moves[pending.move], target: pending.target };
     const targets: { label: string; n: number; species?: string }[] = [];
     foeActive.forEach((f, k) => {
       if (f && !f.fainted && m.target !== "adjacentAlly") targets.push({ label: f.name, n: k + 1, species: f.species.name });
@@ -699,7 +704,7 @@ function Controls({
         <h2>Use {m.move} on…</h2>
         <div className="target-grid">
           {targets.map((t) => (
-            <button key={t.n} type="button" className="target-btn" onClick={() => pick(`move ${pending.move + 1} ${t.n}${suffix(pending.tera)}`)}>
+            <button key={t.n} type="button" className="target-btn" onClick={() => pick(`move ${pending.move + 1} ${t.n}${suffix(pending.power)}`)}>
               {t.species && <ShowdownSprite species={t.species} size={56} still />}
               <span>{t.label}</span>
             </button>
@@ -742,9 +747,22 @@ function Controls({
       )}
       <div className="move-grid">
         {active.moves.map((m, j) => {
-          const move = battle.dex.moves.get(m.id);
-          const usable = !m.disabled && (m.pp > 0 || !m.maxpp);
-          const estimates = move && move.category !== "Status" ? foeActive.map((_, k) => ({ k, e: est(m.id, k, m.target, tera && canTera && gimmick?.word === "terastallize") })).filter((x) => x.e) : [];
+          const base = battle.dex.moves.get(m.id);
+          // With a Z-Move or Max Move picked, the button shows that move instead.
+          const z = on === "zmove" ? active.canZMove?.[j] : undefined;
+          const max = maxed ? active.maxMoves?.maxMoves[j] : undefined;
+          const shown = z ?? max ?? null;
+          const move = shown ? battle.dex.moves.get(shown.move) : base;
+          const name = shown ? (z ? z.move : move.name) : m.move;
+          const target = shown?.target ?? m.target;
+          const usable = !m.disabled && (m.pp > 0 || !m.maxpp) && (on !== "zmove" || !!z) && !max?.disabled;
+          const power = z ? base.zMove?.basePower : max ? base.maxMove?.basePower : move?.basePower;
+          // Z-Moves and Max Moves keep the physical or special side of the move they come from.
+          const category = shown ? base.category : move?.category;
+          const estimates =
+            move && move.category !== "Status" && base.category !== "Status"
+              ? foeActive.map((_, k) => ({ k, e: est(m.id, k, target, on) })).filter((x) => x.e)
+              : [];
           const type = (estimates[0]?.e?.moveType ?? move?.type ?? "Normal").toLowerCase();
           return (
             <button
@@ -754,15 +772,15 @@ function Controls({
               disabled={!usable}
               title={move?.shortDesc || move?.desc || ""}
               onClick={() => {
-                if (doubles && TARGETED.has(m.target)) setPending({ move: j, tera: tera && canTera });
-                else pick(`move ${j + 1}${suffix(tera && canTera)}`);
+                if (doubles && TARGETED.has(target)) setPending({ move: j, power: on, target });
+                else pick(`move ${j + 1}${suffix(on)}`);
               }}
             >
-              <span className="move-name">{m.move}</span>
+              <span className="move-name">{name}</span>
               <span className="move-meta">
                 <span>{estimates[0]?.e?.moveType ?? move?.type}</span>
-                <span>{move?.category}</span>
-                {move && move.category !== "Status" && <span>Power {move.basePower || "–"}</span>}
+                <span>{category}</span>
+                {move && category !== "Status" && <span>Power {power || "–"}</span>}
                 {move && <span>{move.accuracy === true ? "Never misses" : `${move.accuracy}%`}</span>}
                 {m.maxpp ? (
                   <span>
@@ -790,12 +808,12 @@ function Controls({
         })}
       </div>
       <div className="choose-foot">
-        {canTera && (
-          <label className="tera-toggle">
-            <input type="checkbox" checked={tera} onChange={(e) => setTera(e.target.checked)} />
-            {gimmick!.label}
+        {open.map((p) => (
+          <label key={p.word} className="tera-toggle">
+            <input type="checkbox" checked={on === p.word} onChange={(e) => setPower(e.target.checked ? p.word : null)} />
+            {p.label}
           </label>
-        )}
+        ))}
         {active.trapped && <span className="small muted">{nameOf(me.ident)} can't switch out.</span>}
       </div>
       {!active.trapped && bench.length > 0 && (

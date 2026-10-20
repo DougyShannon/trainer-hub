@@ -105,6 +105,8 @@ export type ShownMon = {
   status: string;
   fainted: boolean;
   tera: string;
+  /** Dynamaxed (Wild formats): drawn giant with a red glow. */
+  dynamax?: boolean;
   boosts: [string, number][];
   volatiles: string[];
   /** Exact HP is shown for the player's Pokémon; the computer's shows a percentage. */
@@ -159,7 +161,7 @@ export function FieldMon({ mon, side, anim }: { mon: ShownMon | null; side: "min
       {mon && (
         <div
           key={`${mon.key}-${anim?.n ?? 0}`}
-          className={`field-mon${mon.fainted ? " gone" : ""}${anim ? ` anim-${anim.kind}` : ""}`}
+          className={`field-mon${mon.fainted ? " gone" : ""}${mon.dynamax ? " dynamax" : ""}${anim ? ` anim-${anim.kind}` : ""}`}
           data-move-type={anim?.moveType?.toLowerCase()}
         >
           <ShowdownSprite species={mon.species} num={mon.num} back={side === "mine"} shiny={mon.shiny} className="field-sprite" />

@@ -18,6 +18,8 @@ export type PokemonSet = {
   shiny: boolean;
   happiness?: number;
   teraType: string;
+  /** Wild formats: this Pokémon Gigantamaxes when it Dynamaxes (Charizard, Pikachu and others). */
+  gigantamax?: boolean;
 };
 
 export type TeamPreview = { species: string; sprite: number };
@@ -56,5 +58,6 @@ export function cleanSet(raw: unknown): PokemonSet | null {
     teraType: text(r.teraType, 12),
   };
   if (r.happiness !== undefined) set.happiness = clamp(r.happiness, 0, 255, 255);
+  if (r.gigantamax) set.gigantamax = true;
   return set;
 }
