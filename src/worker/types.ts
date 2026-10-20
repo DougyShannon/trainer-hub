@@ -1,4 +1,5 @@
 import type { GameRoom } from "./game/room";
+import type { LiveBattleRoom } from "./battle/room";
 
 export type User = {
   id: number;
@@ -15,6 +16,7 @@ export type AppEnv = {
   Bindings: {
     DB: D1Database;
     GAME_ROOM: DurableObjectNamespace<GameRoom>;
+    LIVE_BATTLE_ROOM: DurableObjectNamespace<LiveBattleRoom>;
     ADMIN_TRAINERS?: string;
     ANTHROPIC_API_KEY?: string; // set as a Cloudflare secret; the assistant is switched off without it
     ASSISTANT_MODEL?: string;

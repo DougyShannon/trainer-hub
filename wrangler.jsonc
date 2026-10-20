@@ -15,9 +15,15 @@
     }
   ],
   "durable_objects": {
-    "bindings": [{ "name": "GAME_ROOM", "class_name": "GameRoom" }]
+    "bindings": [
+      { "name": "GAME_ROOM", "class_name": "GameRoom" },
+      { "name": "LIVE_BATTLE_ROOM", "class_name": "LiveBattleRoom" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GameRoom"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["GameRoom"] },
+    { "tag": "v2", "new_sqlite_classes": ["LiveBattleRoom"] }
+  ],
   // Trainer names (comma-separated) that can see site change requests made through the assistant.
   "vars": { "ADMIN_TRAINERS": "Professor_D" },
   "observability": { "enabled": true }

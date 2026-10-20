@@ -82,11 +82,11 @@ export class Viewer {
 
   private readonly dex: any;
 
-  constructor(formatid: string) {
+  constructor(formatid: string, perspective: "p1" | "p2" = "p1") {
     const gens = generations(formatid);
     this.dex = simLib(formatid).Dex;
     this.client = new Client(gens as any);
-    this.formatter = new LogFormatter("p1", this.client);
+    this.formatter = new LogFormatter(perspective, this.client);
   }
 
   /** Shows one log line. Returns how long to pause after it (at normal speed) and any animation. */

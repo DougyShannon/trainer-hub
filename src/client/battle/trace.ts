@@ -119,7 +119,8 @@ const STAGE_OF: Record<string, string> = {
 const STAT_NAME: Record<string, StatLine["stat"]> = { atk: "Atk", def: "Def", spa: "SpA", spd: "SpD" };
 const CRIT_MULT = [0, 24, 8, 2, 1];
 
-const label = (p: Sim) => (p ? `${p.side?.id === "p1" ? "" : "foe "}${p.name}` : "");
+// Pokémon on the viewer's own side go by their name, the other side's by "foe" and their name.
+const label = (p: Sim) => (p ? `${p.side?.id === (p.battle?.thMe ?? "p1") ? "" : "foe "}${p.name}` : "");
 const effectName = (battle: Sim) => {
   const e = battle.effect;
   if (!e || !e.name) return "Effect";

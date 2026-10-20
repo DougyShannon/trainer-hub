@@ -11,7 +11,7 @@ import { venueById } from "../../shared/venues";
 import { OPPONENTS } from "../../shared/practice/opponents";
 
 /** Re-fetches lobby lists every few seconds so new tables show up without a refresh. */
-function useTicker(ms: number) {
+export function useTicker(ms: number) {
   const [tick, setTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => document.visibilityState === "visible" && setTick((t) => t + 1), ms);
