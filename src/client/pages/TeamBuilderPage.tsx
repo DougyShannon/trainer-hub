@@ -76,13 +76,15 @@ type SortKey = "tier" | "num" | "name" | "bst" | StatID;
 
 function SpeciesPicker({ engine, format, onPick }: { engine: Engine; format: string; onPick: (name: string) => void }) {
   const all = useMemo(() => engine.speciesFor(format), [engine, format]);
+  const tiers = useMemo(() => [...new Set(all.map((s) => s.tier).filter(Boolean))], [all]);
   const wild = isWild(format);
   const [q, setQ] = useState("");
   const [type, setType] = useState("");
-  const [tier, setTier] = useState("");
+  const [tierPick, setTier] = useState("");
+  // A tier picked in another format (like DOU, after switching from Doubles OU) doesn't apply here.
+  const tier = tiers.includes(tierPick) ? tierPick : "";
   const [learns, setLearns] = useState("");
   const [sort, setSort] = useState<SortKey>(wild ? "num" : "tier");
-  const tiers = useMemo(() => [...new Set(all.map((s) => s.tier).filter(Boolean))], [all]);
   const learnMove = learns.trim() ? engine.moveRow(learns.trim()) : null;
 
   const rows = useMemo(() => {
