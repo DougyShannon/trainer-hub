@@ -30,6 +30,22 @@ function allowDynamax(SideClass: Sim) {
   };
 }
 
+/**
+ * In the Wild formats any Pokémon can use Dark Void. Normally the move fails unless the user is
+ * Darkrai, so its check is taught to let anyone through in those formats.
+ */
+const darkVoidTaught = new Set<unknown>();
+function allowDarkVoid(dex: Sim) {
+  const move = dex.moves.get("darkvoid");
+  if (!move?.exists || darkVoidTaught.has(move)) return;
+  darkVoidTaught.add(move);
+  const original = move.onTry;
+  move.onTry = function (this: Sim, ...args: unknown[]) {
+    if (hasDynamax(this.format.id)) return;
+    return original?.apply(this, args);
+  };
+}
+
 export type Side = { name: string; team: string | object[] };
 
 export type SessionSetup = {
@@ -96,6 +112,7 @@ export class BattleSession {
     const startOpts = start ? JSON.parse(start.slice(7)) : { formatid: setup.formatid };
     const lib = simLib(startOpts.formatid ?? setup.formatid);
     allowDynamax(lib.Side);
+    allowDarkVoid(lib.Dex);
     this.battle = new lib.Battle({ ...startOpts, send: (type: string, data: unknown) => this.receive(type, data) });
     if (hasDynamax(this.battle.format.id)) {
       // Both players' Dynamax starts unused, set just before the battle sends its first choices.
