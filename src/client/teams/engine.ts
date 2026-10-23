@@ -147,8 +147,8 @@ function ctx(formatId: string): Ctx {
 
 const toSpeciesRow = (s: SimSpecies, c: Ctx): SpeciesRow => {
   const tier = c.doubles ? s.doublesTier : c.natDex ? s.natDexTier : s.tier;
-  const order = c.doubles ? DOUBLES_TIERS : SINGLES_TIERS;
-  const rank = order.indexOf(tier);
+  // Champions doubles uses the singles tiers, so rank by whichever list has the tier.
+  const rank = [c.doubles ? DOUBLES_TIERS : SINGLES_TIERS, c.doubles ? SINGLES_TIERS : DOUBLES_TIERS].map((o) => o.indexOf(tier)).find((n) => n >= 0) ?? -1;
   const stats = { ...s.baseStats };
   return {
     id: s.id,
