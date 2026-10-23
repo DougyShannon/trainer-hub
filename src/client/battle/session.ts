@@ -1,6 +1,8 @@
-// One battle against the computer, run entirely in the browser with Pokémon Showdown's simulator.
-// The player is always "p1"; the computer is "p2". The page reads `lines` (the battle log from the
-// player's point of view) and `request` (what the player has to choose next).
+// One battle, run entirely in the browser with Pokémon Showdown's simulator. Against the computer
+// the player is "p1" and the computer "p2". Against another trainer each browser runs the same
+// battle from the same seed and teams, and the choices travel through the battle room (see
+// `remote`). The page reads `lines` (the battle log from the player's point of view) and `request`
+// (what the player has to choose next).
 
 import { simLib } from "./simlib";
 import { installTracer, type Calc } from "./trace";
@@ -48,11 +50,20 @@ function allowDarkVoid(dex: Sim) {
 
 export type Side = { name: string; team: string | object[] };
 
+export type Seat = "p1" | "p2";
+
 export type SessionSetup = {
   formatid: string;
   p1: Side;
   p2: Side;
   skill: AiSkill;
+  /** Whose side of the battle this browser shows (and plays, unless just watching). */
+  perspective?: Seat;
+  /**
+   * Battling another trainer: the player's checked choice goes here instead of straight into the
+   * battle, and comes back in the room's list of choices (see `apply`). There is no computer.
+   */
+  remote?: { send: (choice: string, rqid: number) => void; forfeit: () => void; watching?: boolean };
 };
 
 /** What the player can do right now, straight from the simulator. */
@@ -106,8 +117,17 @@ export class BattleSession {
   error: string | null = null;
   private replaying = false;
   private listeners = new Set<() => void>();
+  /** The side this browser shows. */
+  readonly me: Seat;
+  /** Lines of the room's list of choices already played (battling another trainer). */
+  private applied = 0;
+  /** The request already answered and sent to the room, so it shows as waiting until the next one. */
+  private sentRqid: number | null = null;
+  /** Requests the player has had so far. Numbers each one, the same way in every browser. */
+  private requests = 0;
 
   private constructor(readonly setup: SessionSetup, replay?: string[]) {
+    this.me = setup.perspective ?? "p1";
     const start = replay?.find((l) => l.startsWith(">start "));
     const startOpts = start ? JSON.parse(start.slice(7)) : { formatid: setup.formatid };
     const lib = simLib(startOpts.formatid ?? setup.formatid);
@@ -122,11 +142,13 @@ export class BattleSession {
         return start.apply(this, args);
       };
     }
+    this.battle.thMe = this.me;
     installTracer(this.battle, (calc) => this.calcs.push(calc) - 1);
     if (replay) {
       this.replaying = true;
       for (const line of replay) this.replayLine(line);
       this.replaying = false;
+      this.applied = replay.length;
     } else {
       this.battle.setPlayer("p1", { name: setup.p1.name, team: setup.p1.team });
       this.battle.setPlayer("p2", { name: setup.p2.name, team: setup.p2.team });
@@ -138,6 +160,28 @@ export class BattleSession {
   /** Starts a new battle. */
   static start(setup: SessionSetup) {
     return new BattleSession(setup);
+  }
+
+  /**
+   * A battle against another trainer, from the room's list of lines: the start (format and seed),
+   * both players and their teams, then every choice so far.
+   */
+  static live(setup: SessionSetup, input: string[]) {
+    return new BattleSession(setup, input);
+  }
+
+  /** Plays the room's newest choices (the list always starts from the beginning of the battle). */
+  apply(input: string[]) {
+    if (input.length <= this.applied) return;
+    for (const line of input.slice(this.applied)) this.replayLine(line);
+    this.applied = input.length;
+    this.flush();
+    this.emit();
+  }
+
+  /** The player has answered this request and is waiting for the other trainer. */
+  get sent(): boolean {
+    return this.sentRqid !== null && this.request?.rqid === this.sentRqid;
   }
 
   /** Carries on a saved battle by replaying its choices (the same random seed gives the same battle). */
@@ -172,6 +216,22 @@ export class BattleSession {
   /** The player's choice, in Showdown's words: "move 1", "move 2 1 terastallize", "switch 3", "team 1234". */
   choose(choice: string): boolean {
     this.error = null;
+    const remote = this.setup.remote;
+    if (remote) {
+      // Check the choice without making it: it only counts once it comes back from the room, so
+      // both browsers make the same choices in the same order.
+      if (remote.watching || this.sent) return false;
+      const side = this.battle.sides[this.me === "p1" ? 0 : 1];
+      const ok = side.choose(choice);
+      if (!ok) this.error = side.choice.error || "That choice isn't allowed.";
+      side.clearChoice();
+      if (ok && this.request?.rqid !== undefined) {
+        this.sentRqid = this.request.rqid;
+        remote.send(choice, this.request.rqid);
+      }
+      this.emit();
+      return ok;
+    }
     const ok = this.battle.choose("p1", choice);
     if (!ok) {
       this.error = this.battle.sides[0].choice.error || "That choice isn't allowed.";
@@ -185,6 +245,7 @@ export class BattleSession {
 
   forfeit() {
     if (this.battle.ended) return;
+    if (this.setup.remote) return this.setup.remote.forfeit();
     this.battle.forceWin("p2");
     this.flush();
     this.emit();
@@ -198,7 +259,7 @@ export class BattleSession {
       const slot = rest.slice(0, 2);
       this.battle.setPlayer(slot, JSON.parse(rest.slice(3)));
     } else if (cmd === "p1" || cmd === "p2") {
-      this.battle.choose(cmd, rest);
+      if (!this.battle.choose(cmd, rest)) this.battle.sides[cmd === "p1" ? 0 : 1].clearChoice();
     } else if (cmd === "forcewin") {
       this.battle.forceWin(rest);
     }
@@ -206,7 +267,7 @@ export class BattleSession {
 
   /** The computer chooses whenever it has a choice to make. */
   private computerTurn() {
-    if (this.replaying) return;
+    if (this.replaying || this.setup.remote) return;
     for (let guard = 0; guard < 20 && !this.battle.ended; guard++) {
       const side = this.battle.sides[1];
       const req = side.activeRequest;
@@ -236,7 +297,7 @@ export class BattleSession {
         const line = lines[i];
         if (line.startsWith("|split|")) {
           // The next line is the private version, the one after the public one.
-          const mine = line.slice(7) === "p1";
+          const mine = line.slice(7) === this.me;
           this.lines.push(mine ? lines[i + 1] : lines[i + 2]);
           i += 2;
           continue;
@@ -249,9 +310,10 @@ export class BattleSession {
       const nl = text.indexOf("\n");
       const side = text.slice(0, nl);
       const msg = text.slice(nl + 1);
-      if (side !== "p1") return;
+      if (side !== this.me) return;
       if (msg.startsWith("|request|")) {
-        this.request = JSON.parse(msg.slice(9));
+        const req = JSON.parse(msg.slice(9)) as Request;
+        this.request = { ...req, rqid: req.rqid ?? ++this.requests };
       } else if (msg.startsWith("|error|")) {
         this.error = msg.slice(7).replace(/^\[[^\]]+\]\s*/, "");
       }

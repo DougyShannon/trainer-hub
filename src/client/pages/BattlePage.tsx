@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router";
-import { useApi, type TeamSummary } from "../lib/api";
+import { Link, useNavigate } from "react-router";
+import { send, useApi, type TeamSummary } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { ErrorBox, Loading, PageLogo } from "../components/ui";
-import { BATTLE_FORMATS, BATTLE_OPPONENTS, LOAN_TEAMS, battleFormat, type BattleFormatId } from "../../shared/battle/opponents";
+import { BATTLE_FORMATS, BATTLE_OPPONENTS, LOAN_TEAMS, battleFormat, type BattleFormat, type BattleFormatId } from "../../shared/battle/opponents";
 import { teamFormatLabel } from "../teams/formats";
 import { STADIUMS, savedStadium, saveStadium, stadiumById } from "../battle/stadiums";
 import { StadiumPreview, ShowdownSprite } from "../components/battle/Scene";
+import { problemsFor } from "../battle/live";
+import type { LiveBattleSummary } from "../../shared/live-battle";
+import { TrainerChip, timeAgo, useTicker } from "./PlayPage";
 
 export type BattleProgress = {
   progress: { format: string; opponent: string; wins: number; losses: number; firstWinAt: string | null }[];
@@ -193,6 +196,10 @@ export function BattlePage() {
             {info.data.allUnlocked && <p className="small practice-warn">As the site owner, every opponent is open to you for testing.</p>}
           </section>
 
+          <FriendBattles format={fmt} teamId={chosenTeam} teamName={teamInfo?.name ?? null} trainerName={user.trainerName} />
+
+          <h2 className="ladder-head">Battle the computer</h2>
+
           <ol className="ladder battle-ladder">
             {BATTLE_OPPONENTS.map((o) => {
               const open = unlocked(o.level);
@@ -244,5 +251,155 @@ export function BattlePage() {
         </>
       )}
     </div>
+  );
+}
+
+const LIVE_STATUS: Record<string, string> = { waiting: "Waiting for an opponent", playing: "In progress", finished: "Finished" };
+
+/** Battling other trainers: open a battle with the chosen team and format, or join someone else's. */
+function FriendBattles({ format, teamId, teamName, trainerName }: { format: BattleFormat; teamId: string; teamName: string | null; trainerName: string }) {
+  const navigate = useNavigate();
+  const tick = useTicker(5000);
+  const open = useApi<LiveBattleSummary[]>("/api/live-battles/open", { fresh: true, reloadKey: tick });
+  const live = useApi<LiveBattleSummary[]>("/api/live-battles/live", { fresh: true, reloadKey: tick });
+  const mine = useApi<LiveBattleSummary[]>("/api/live-battles/mine", { fresh: true, reloadKey: tick });
+  const [isOpen, setIsOpen] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [problems, setProblems] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const label = (id: string) => battleFormat(id)?.label ?? id;
+
+  const create = async () => {
+    setBusy(true);
+    setError(null);
+    setProblems([]);
+    try {
+      const found = await problemsFor(teamId, format.id);
+      if (found.length) {
+        setProblems(found);
+        setBusy(false);
+        return;
+      }
+      const { id } = await send<{ id: string }>("POST", "/api/live-battles", { teamId, format: format.id, isOpen });
+      navigate(`/battle/live/${id}`);
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  };
+
+  const others = open.data?.filter((b) => b.host.trainerName !== trainerName) ?? [];
+  const myActive = mine.data?.filter((b) => b.status !== "finished") ?? [];
+
+  return (
+    <section className="panel friend-battles">
+      <h2>Battle a friend</h2>
+      <p className="muted small">
+        Battle another trainer live with your Team Builder teams. Open a battle with the format and team picked above and send
+        the link to a friend, or join a battle someone else has opened.
+      </p>
+      <div className="play-grid">
+        <div>
+          <h3>Open a battle</h3>
+          {!teamName ? (
+            <p className="small muted">Loan teams are for battling the computer. Pick one of your own teams above.</p>
+          ) : (
+            <>
+              <p className="small">
+                {format.label} with <b>{teamName}</b>
+              </p>
+              <div className="field">
+                <span className="field-label">Who can join</span>
+                <div className="segmented" role="group" aria-label="Who can join">
+                  <button type="button" className={isOpen ? "active" : ""} onClick={() => setIsOpen(true)}>
+                    Anyone on this page
+                  </button>
+                  <button type="button" className={!isOpen ? "active" : ""} onClick={() => setIsOpen(false)}>
+                    Only people with the link
+                  </button>
+                </div>
+              </div>
+              {problems.length > 0 && (
+                <div className="battle-problems">
+                  <p className="form-error">{teamName} can't play {format.label}:</p>
+                  <ul>
+                    {problems.slice(0, 8).map((p, i) => (
+                      <li key={i}>{p}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {error && <p className="form-error">{error}</p>}
+              <button type="button" className="primary-btn" disabled={busy} onClick={create}>
+                {busy ? "Checking your team…" : "Open a battle"}
+              </button>
+            </>
+          )}
+        </div>
+        <div>
+          <h3>Waiting for an opponent</h3>
+          {open.loading && !open.data ? (
+            <Loading />
+          ) : others.length ? (
+            <ul className="game-list">
+              {others.map((b) => (
+                <li key={b.id}>
+                  <TrainerChip name={b.host.trainerName} avatar={b.host.avatarDex} />
+                  <span className="game-meta">
+                    {label(b.format)} · {timeAgo(b.createdAt)}
+                  </span>
+                  <Link to={`/battle/live/${b.id}`} className="primary-btn small">
+                    Join
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="small muted">Nobody is waiting right now. Open a battle and it will show up here for other trainers.</p>
+          )}
+        </div>
+      </div>
+
+      {myActive.length > 0 && (
+        <>
+          <h3>Your battles</h3>
+          <ul className="game-list wide">
+            {myActive.map((b) => {
+              const opponent = b.host.trainerName === trainerName ? b.guest : b.host;
+              return (
+                <li key={b.id}>
+                  <span>
+                    {opponent ? <>vs {opponent.trainerName}</> : <>Your battle</>} · {label(b.format)}
+                  </span>
+                  <span className="game-meta">{LIVE_STATUS[b.status]}</span>
+                  <Link to={`/battle/live/${b.id}`} className="secondary-btn small">
+                    {b.status === "waiting" ? "Open" : "Return to battle"}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
+
+      {!!live.data?.length && (
+        <>
+          <h3>Being battled now</h3>
+          <ul className="game-list wide">
+            {live.data.map((b) => (
+              <li key={b.id}>
+                <span>
+                  {b.host.trainerName} vs {b.guest?.trainerName}
+                </span>
+                <span className="game-meta">{label(b.format)}</span>
+                <Link to={`/battle/live/${b.id}`} className="secondary-btn small">
+                  Watch
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
   );
 }

@@ -11,6 +11,7 @@ import { teams } from "./routes/teams";
 import { boards } from "./routes/boards";
 import { cardsToFix } from "./routes/cards-to-fix";
 import { battle } from "./routes/battle";
+import { liveBattles } from "./routes/live-battles";
 
 const app = new Hono<AppEnv>();
 
@@ -27,6 +28,7 @@ app.route("/", teams);
 app.route("/", boards);
 app.route("/", cardsToFix);
 app.route("/", battle);
+app.route("/", liveBattles);
 
 app.notFound((c) => c.json({ error: "Not found" }, 404));
 app.onError((err, c) => {
@@ -36,3 +38,4 @@ app.onError((err, c) => {
 
 export default app;
 export { GameRoom } from "./game/room";
+export { LiveBattleRoom } from "./battle/room";

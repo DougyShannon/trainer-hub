@@ -1565,3 +1565,11 @@ button.guide-mark { border: 0; font-family: inherit; }
   .calc-steps li { grid-template-columns: 1fr; gap: 0; }
   .balls-foe { top: auto; bottom: 46%; }
 }
+
+/* Battle tab: battling other trainers */
+.friend-battles { margin: 20px 0; display: grid; gap: 12px; }
+.friend-battles h3 { margin: 4px 0 8px; font-size: 16px; }
+.friend-battles .play-grid > div { display: grid; gap: 10px; align-content: start; }
+.ladder-head { margin: 24px 0 12px; }
+.live-waiting { max-width: 640px; margin: 24px auto; display: grid; gap: 12px; }
+.live-waiting h1 { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

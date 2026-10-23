@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { send, useApi, type Me, type TeamDetail } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -10,6 +10,7 @@ import { stadiumById } from "../battle/stadiums";
 import { FieldMon, HpBox, ShowdownSprite, StadiumBackdrop, type ShownMon } from "../components/battle/Scene";
 import { CalcCard, RESIDUAL_HINTS } from "../components/battle/CalcCard";
 import { savedBattleKey } from "./BattlePage";
+import { cleanForSim } from "../battle/live";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -84,17 +85,6 @@ export function BattleGamePage() {
       onRematch={() => setRound((r) => r + 1)}
     />
   );
-}
-
-/** Team Builder sets in the simulator's shape (blank moves dropped). */
-function cleanForSim(set: TeamDetail["sets"][number]) {
-  return {
-    ...set,
-    moves: set.moves.filter(Boolean),
-    gender: set.gender || undefined,
-    teraType: set.teraType || undefined,
-    name: set.name || set.species,
-  };
 }
 
 const VOLATILE_LABEL: Record<string, string> = {
@@ -180,6 +170,7 @@ function BattleGame({
     const session = engine.BattleSession.start(setup);
     return { session, viewer: new engine.Viewer(format.id), saved: null, problems };
   });
+  const recorded = useRef(state.saved?.recorded ?? false);
 
   if (!state.session || !state.viewer) {
     return (
@@ -200,47 +191,77 @@ function BattleGame({
       </div>
     );
   }
+  const venue = state.saved?.stadium ?? stadium;
+  const rematch = () => {
+    writeSaved(storeKey, null);
+    onRematch();
+  };
   return (
     <BattleScreen
       engine={engine}
       session={state.session}
       viewer={state.viewer}
-      storeKey={storeKey}
-      initialSaved={state.saved}
-      opponent={opponent}
       format={format}
-      teamName={teamName}
-      stadium={state.saved?.stadium ?? stadium}
-      onRematch={() => {
+      stadium={venue}
+      title={
+        <>
+          {teamName} vs {opponent.name}
+        </>
+      }
+      subtitle={`${opponent.title} · ${stadiumById(venue).name}`}
+      foeName={opponent.name}
+      forfeitText="Give up this battle? It counts as a loss."
+      // Save after every choice so the battle can be carried on later.
+      onProgress={() => writeSaved(storeKey, { inputLog: state.session!.inputLog, stadium: venue, teamName, recorded: false })}
+      // Record the result once, when the battle has finished playing out.
+      onFinish={(winner) => {
+        if (recorded.current) return;
+        recorded.current = true;
         writeSaved(storeKey, null);
-        onRematch();
+        void send("POST", "/api/battle/result", { opponent: opponent.id, format: format.id, won: winner === "p1" }).catch(() => {});
       }}
+      end={(winner) => <EndPanel winner={winner} opponent={opponent} format={format} onRematch={rematch} />}
     />
   );
 }
 
-function BattleScreen({
+/**
+ * The battle itself: the stadium, the log and the choices. Used for battles against the computer
+ * and against other trainers; the player's side is whichever side the session shows.
+ */
+export function BattleScreen({
   engine,
   session,
   viewer,
-  storeKey,
-  initialSaved,
-  opponent,
   format,
-  teamName,
   stadium,
-  onRematch,
+  title,
+  subtitle,
+  foeName,
+  forfeitText,
+  onProgress,
+  onFinish,
+  end,
+  notice,
+  watching = false,
 }: {
   engine: BattleEngine;
   session: BattleSession;
   viewer: Viewer;
-  storeKey: string;
-  initialSaved: Saved | null;
-  opponent: BattleOpponent;
   format: BattleFormat;
-  teamName: string;
   stadium: string;
-  onRematch: () => void;
+  title: ReactNode;
+  subtitle: ReactNode;
+  foeName: string;
+  forfeitText: string;
+  /** After every choice. */
+  onProgress?: () => void;
+  /** Once the battle has finished playing out on screen: "p1", "p2" or "" for a draw. */
+  onFinish?: (winner: string) => void;
+  end: (winner: string) => ReactNode;
+  /** Shown above the choices, e.g. that the other trainer has lost connection. */
+  notice?: ReactNode;
+  watching?: boolean;
 }) {
   const [version, setVersion] = useState(0);
   const [tick, setTick] = useState(0);
@@ -254,7 +275,6 @@ function BattleScreen({
   });
   const anims = useRef<Record<string, Anim & { n: number }>>({});
   const animN = useRef(0);
-  const recorded = useRef(initialSaved?.recorded ?? false);
   const [openCalcs, setOpenCalcs] = useState<Set<number>>(new Set());
 
   const setSpeed = (s: Speed) => {
@@ -289,25 +309,26 @@ function BattleScreen({
     return () => clearTimeout(t);
   }, [tick, version, speed, session, viewer, busy]);
 
-  // Save after every choice so the battle can be carried on later.
+  const progress = useRef(onProgress);
+  const finish = useRef(onFinish);
+  progress.current = onProgress;
+  finish.current = onFinish;
+
   useEffect(() => {
-    if (session.ended) return;
-    writeSaved(storeKey, { inputLog: session.inputLog, stadium, teamName, recorded: false });
-  }, [version, session, storeKey, stadium, teamName]);
+    if (!session.ended) progress.current?.();
+  }, [version, session]);
 
   const winner = !busy ? session.winner : null;
 
-  // Record the result once, when the battle has finished playing out.
   useEffect(() => {
-    if (winner === null || recorded.current) return;
-    recorded.current = true;
-    writeSaved(storeKey, null);
-    void send("POST", "/api/battle/result", { opponent: opponent.id, format: format.id, won: winner === "p1" }).catch(() => {});
-  }, [winner, storeKey, opponent.id, format.id]);
+    if (winner !== null) finish.current?.(winner);
+  }, [winner]);
 
   const client = viewer.client;
+  const me = session.me;
+  const foe = me === "p1" ? "p2" : "p1";
   const req = session.request as Request | null;
-  const showControls = !busy && !session.ended && !!req && !req.wait;
+  const showControls = !watching && !busy && !session.ended && !!req && !req.wait && !session.sent;
   const lab = useMemo(() => (showControls && req?.active ? new engine.Lab(session.battle) : null), [showControls, req, engine, session]);
 
   const toShown = (p: any, exact: boolean): ShownMon | null => {
@@ -336,8 +357,8 @@ function BattleScreen({
 
   const doubles = format.doubles;
   const slots = doubles ? [0, 1] : [0];
-  const mine = slots.map((i) => toShown(client.p1?.active?.[i], true));
-  const foes = slots.map((i) => toShown(client.p2?.active?.[i], false));
+  const mine = slots.map((i) => toShown(client[me]?.active?.[i], true));
+  const foes = slots.map((i) => toShown(client[foe]?.active?.[i], false));
   const field = client.field;
   const weather = field?.weather ? (WEATHER_LABEL[field.weather] ?? field.weather) : "";
   const terrain = field?.terrain ? String(field.terrain).replace(/([a-z])([A-Z])/g, "$1 $2") : "";
@@ -345,6 +366,7 @@ function BattleScreen({
   const sideConds = (s: any) =>
     Object.entries(s?.sideConditions ?? {}).map(([id, c]: [string, any]) => `${SIDE_LABEL[id] ?? c?.name ?? id}${c?.level > 1 ? ` ×${c.level}` : ""}`);
   const venue = stadiumById(stadium);
+  const waitText = watching ? "Watching the battle." : `Waiting for ${foeName}…`;
 
   const turns = useMemo(() => groupByTurn(viewer.entries), [viewer.entries.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -359,11 +381,9 @@ function BattleScreen({
           <p className="eyebrow">
             <Link to="/battle">Battle</Link> · {format.label}
           </p>
-          <h1>
-            {teamName} vs {opponent.name}
-          </h1>
+          <h1>{title}</h1>
           <p className="small muted">
-            {opponent.title} · {venue.name} · Turn {viewer.turn}
+            {subtitle} · Turn {viewer.turn}
           </p>
         </div>
         <div className="row-actions">
@@ -374,12 +394,12 @@ function BattleScreen({
               </button>
             ))}
           </div>
-          {!session.ended && (
+          {!session.ended && !watching && (
             <button
               type="button"
               className="secondary-btn small"
               onClick={() => {
-                if (confirm("Give up this battle? It counts as a loss.")) session.forfeit();
+                if (confirm(forfeitText)) session.forfeit();
               }}
             >
               Forfeit
@@ -404,32 +424,33 @@ function BattleScreen({
           <div className="hp-boxes">{foes.map((m, i) => m && <HpBox key={i} mon={m} side="foe" />)}</div>
           <div className="field-row">
             {foes.map((m, i) => (
-              <FieldMon key={i} mon={m} side="foe" anim={anims.current[`p2${"ab"[i]}`]} />
+              <FieldMon key={i} mon={m} side="foe" anim={anims.current[`${foe}${"ab"[i]}`]} />
             ))}
           </div>
-          <SideTags items={sideConds(client.p2)} />
+          <SideTags items={sideConds(client[foe])} />
         </div>
         <div className="my-side">
           <div className="field-row">
             {mine.map((m, i) => (
-              <FieldMon key={i} mon={m} side="mine" anim={anims.current[`p1${"ab"[i]}`]} />
+              <FieldMon key={i} mon={m} side="mine" anim={anims.current[`${me}${"ab"[i]}`]} />
             ))}
           </div>
           <div className="hp-boxes">{mine.map((m, i) => m && <HpBox key={i} mon={m} side="mine" />)}</div>
-          <SideTags items={sideConds(client.p1)} />
+          <SideTags items={sideConds(client[me])} />
         </div>
-        <TeamBalls side={client.p1} className="balls-mine" />
-        <TeamBalls side={client.p2} className="balls-foe" />
+        <TeamBalls side={client[me]} className="balls-mine" />
+        <TeamBalls side={client[foe]} className="balls-foe" />
       </div>
 
       <div className="battle-bottom">
         <section className="panel battle-controls" aria-live="polite">
+          {notice}
           {winner !== null ? (
-            <EndPanel winner={winner} opponent={opponent} format={format} onRematch={onRematch} />
+            end(winner)
           ) : session.ended || busy ? (
             <p className="muted">{busy ? "…" : "The battle is over."}</p>
-          ) : !req || req.wait ? (
-            <p className="muted">Waiting for {opponent.name}…</p>
+          ) : !showControls ? (
+            <p className="muted">{waitText}</p>
           ) : (
             <Controls key={`${req.rqid ?? 0}-${version}`} engine={engine} req={req} lab={lab} doubles={doubles} session={session} onChoose={choose} />
           )}
@@ -673,7 +694,10 @@ function Controls({
   const maxed = on === "dynamax" || (!!active.maxMoves && !active.canDynamax);
   const bench = benchFor(slot, filled);
   const battle = session.battle;
-  const foeActive: any[] = battle.sides[1].active;
+  // Which of the battle's two sides is the player's, and which the other trainer's.
+  const mySide = session.me === "p1" ? 0 : 1;
+  const foeSide = 1 - mySide;
+  const foeActive: any[] = battle.sides[foeSide].active;
 
   const est = (moveId: string, foeSlot: number, target: string, word: string | null): Estimate | null => {
     if (!lab) return null;
@@ -681,8 +705,8 @@ function Controls({
     if (!foe || foe.fainted) return null;
     const foesUp = foeActive.filter((f) => f && !f.fainted).length;
     return lab.damage(
-      { side: 0, index: slot },
-      { side: 1, index: battle.sides[1].pokemon.indexOf(foe) },
+      { side: mySide, index: slot },
+      { side: foeSide, index: battle.sides[foeSide].pokemon.indexOf(foe) },
       moveId,
       { tera: word === "terastallize", zmove: word === "zmove", dynamax: word === "dynamax", spread: doubles && SPREAD.has(target) && foesUp > 1 },
     );
@@ -696,7 +720,7 @@ function Controls({
     });
     if (["normal", "any", "adjacentAlly", "adjacentAllyOrSelf"].includes(m.target)) {
       const allySlot = slot ^ 1;
-      const ally = battle.sides[0].active[allySlot];
+      const ally = battle.sides[mySide].active[allySlot];
       if (ally && !ally.fainted) targets.push({ label: `${ally.name} (your partner)`, n: -(allySlot + 1), species: ally.species.name });
     }
     return (
@@ -717,12 +741,12 @@ function Controls({
     );
   }
 
-  const mySpeed = lab?.speed({ side: 0, index: slot });
+  const mySpeed = lab?.speed({ side: mySide, index: slot });
   const speedInfo = lab
     ? foeActive
         .map((f) => {
           if (!f || f.fainted) return null;
-          const theirs = lab.speed({ side: 1, index: battle.sides[1].pokemon.indexOf(f) });
+          const theirs = lab.speed({ side: foeSide, index: battle.sides[foeSide].pokemon.indexOf(f) });
           const tr = lab.trickRoom;
           const first = mySpeed! === theirs ? "speed tie: a coin flip decides" : (mySpeed! > theirs) !== tr ? "you move first" : "they move first";
           return `${f.name} ${theirs}: ${first}${tr ? " (Trick Room: slower goes first)" : ""}`;
@@ -855,7 +879,7 @@ function TeamPreview({ engine, req, doubles, session, onChoose }: { engine: Batt
   const need = Math.min(req.maxChosenTeamSize ?? party.length, party.length);
   const leads = doubles ? 2 : 1;
   const min = need < party.length ? need : Math.min(leads, party.length);
-  const foeTeam: any[] = session.battle.sides[1].pokemon;
+  const foeTeam: any[] = session.battle.sides[session.me === "p1" ? 1 : 0].pokemon;
   return (
     <div className="choose">
       <h2>{need < party.length ? `Pick ${need} Pokémon to bring` : "Pick your lead"}</h2>
