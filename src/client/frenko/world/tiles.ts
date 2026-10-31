@@ -183,6 +183,48 @@ const stall: Paint = (ctx, x, y) => {
   }
 };
 
+const soil: Paint = (ctx, x, y) => {
+  ctx.fillStyle = "#8a5a34";
+  ctx.fillRect(x, y, TILE, TILE);
+  ctx.fillStyle = "#6e4426";
+  for (let i = 0; i < 3; i++) ctx.fillRect(x, y + 2 + i * 5, TILE, 2);
+};
+
+/** Rows of young crops growing in the soil. */
+const crops: Paint = (ctx, x, y) => {
+  ctx.fillStyle = "#3a8a3e";
+  for (let i = 0; i < 2; i++) {
+    for (let j = 0; j < 3; j++) {
+      ctx.fillRect(x + 2 + i * 8, y + 1 + j * 5, 4, 3);
+      ctx.fillRect(x + 3 + i * 8, y + j * 5, 2, 1);
+    }
+  }
+  ctx.fillStyle = "#68b850";
+  for (let i = 0; i < 2; i++) for (let j = 0; j < 3; j++) ctx.fillRect(x + 3 + i * 8, y + 1 + j * 5, 1, 1);
+};
+
+/** A clipped hedge, used for walls of greenery and for gates that open. */
+export const hedge: Paint = (ctx, x, y) => {
+  ctx.fillStyle = "#2a6a30";
+  ctx.fillRect(x, y - 2, TILE, 17);
+  ctx.fillStyle = "#3a8a3e";
+  ctx.fillRect(x + 1, y - 1, 14, 13);
+  ctx.fillStyle = "#58a858";
+  for (let i = 0; i < 3; i++) ctx.fillRect(x + 2 + i * 5, y + 1 + (i % 2) * 4, 3, 2);
+};
+
+const hay: Paint = (ctx, x, y) => {
+  ctx.fillStyle = "#b08828";
+  ctx.fillRect(x + 1, y + 3, 14, 12);
+  ctx.fillStyle = "#e8c050";
+  ctx.fillRect(x + 2, y + 2, 12, 11);
+  ctx.fillStyle = "#c8a038";
+  for (let i = 0; i < 3; i++) ctx.fillRect(x + 2, y + 4 + i * 3, 12, 1);
+  ctx.fillStyle = "#a05028";
+  ctx.fillRect(x + 5, y + 2, 1, 11);
+  ctx.fillRect(x + 10, y + 2, 1, 11);
+};
+
 // Inside buildings.
 const floor: Paint = (ctx, x, y, col) => {
   ctx.fillStyle = "#d8b880";
@@ -289,6 +331,10 @@ export const TILES: Record<string, TileKind> = {
   s: { name: "sand", solid: false, ground: sand },
   "=": { name: "jetty", solid: false, ground: jetty },
   M: { name: "market stall", solid: true, ground: path, object: stall },
+  o: { name: "soil", solid: false, ground: soil },
+  c: { name: "crops", solid: true, ground: soil, object: crops },
+  h: { name: "hay bale", solid: true, ground: grass, object: hay },
+  H: { name: "hedge", solid: true, ground: floor, object: hedge },
   // Inside buildings.
   _: { name: "floor", solid: false, ground: floor },
   W: { name: "wall", solid: true, ground: wall },

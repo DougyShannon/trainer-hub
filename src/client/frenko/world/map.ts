@@ -33,6 +33,13 @@ export type MapData = {
   people?: { look: PersonLook; x: number; y: number; facing: Direction; text: string[] }[];
   /** What each sign says, by its column and row. */
   signs?: { x: number; y: number; text: string[] }[];
+  /** Hedge gates that stand closed until the player has the named flag (see SaveFile.flags). */
+  gates?: { x: number; y: number; flag: string }[];
+  /**
+   * A seed-planting puzzle: the player plants one of `seeds` in each plot, and the puzzle is solved
+   * (setting `flag`) when every plot has its right seed (`seed` is its number in the list).
+   */
+  seedPuzzle?: { flag: string; seeds: { name: string; color: string }[]; plots: { x: number; y: number; seed: number }[] };
 };
 
 /** Which way to look for the map joined on, for a square just off the edge. */
@@ -44,6 +51,8 @@ export class GameMap {
   readonly spawn: Spot;
   private rows: string[];
   private solid = new Set<string>();
+  /** The player's flags, so gates know whether they're open (set by the overworld). */
+  flags: Record<string, boolean> = {};
 
   constructor(
     readonly data: MapData,
@@ -69,6 +78,7 @@ export class GameMap {
       if (this.warpAt(door.x, door.y)) this.solid.delete(`${door.x},${door.y}`);
     }
     for (const p of data.people ?? []) this.solid.add(`${p.x},${p.y}`);
+    for (const p of data.seedPuzzle?.plots ?? []) this.solid.add(`${p.x},${p.y}`);
   }
 
   inside(x: number, y: number) {
@@ -114,7 +124,15 @@ export class GameMap {
       const there = this.across(x, y);
       return !!there && there.map.walkable(there.x, there.y);
     }
-    return !this.tile(x, y).solid && !this.solid.has(`${x},${y}`);
+    return !this.tile(x, y).solid && !this.solid.has(`${x},${y}`) && !this.closedGateAt(x, y);
+  }
+
+  closedGateAt(x: number, y: number) {
+    return this.data.gates?.some((g) => g.x === x && g.y === y && !this.flags[g.flag]) ?? false;
+  }
+
+  plotAt(x: number, y: number) {
+    return this.data.seedPuzzle?.plots.find((p) => p.x === x && p.y === y);
   }
 
   warpAt(x: number, y: number) {

@@ -6,7 +6,10 @@ import type { Game } from "../engine/game";
 import type { Scene } from "../engine/scene";
 import { SCREEN_HEIGHT, SCREEN_WIDTH, TILE } from "../engine/screen";
 import { drawText, measureText } from "../ui/font";
+import { askChoice } from "../ui/menu";
 import { MessageScene } from "../ui/textbox";
+import { GROWING, PLANT_QUESTION, PLANTED, PUZZLE_SOLVED, PUZZLE_WRONG } from "../data/placeholders";
+import { hedge } from "../world/tiles";
 import { drawWindow } from "../ui/window";
 import { personPicture } from "../art/people";
 import { sprite } from "../art/pixels";
@@ -38,6 +41,8 @@ export class OverworldScene implements Scene {
   private lastSquare = "";
   /** People who have turned to face the player while talking. */
   private turned = new Map<string, Direction>();
+  /** Seeds planted in puzzle plots this visit ("x,y" to seed number). They reset on leaving. */
+  private planted = new Map<string, number>();
 
   /** `intro` is shown in the message box as soon as the map appears (used for New Game). */
   constructor(
@@ -56,14 +61,42 @@ export class OverworldScene implements Scene {
   /** Shows the place name when arriving somewhere new outdoors (not on coming back out of a door). */
   private arrive(game: Game) {
     this.turned.clear();
+    this.planted.clear();
+    this.map.flags = game.save?.flags ?? {};
     if (this.map.data.indoor || this.map.data.name === this.bannerName) return;
     this.bannerName = this.map.data.name;
     this.bannerAt = game.time;
   }
 
-  private say(game: Game, text: string[]) {
-    const name = game.save?.player.name ?? "PLAYER";
-    game.push(new MessageScene(text.map((line) => line.replaceAll("{PLAYER}", name))));
+  private fill(game: Game, line: string) {
+    return line.replaceAll("{PLAYER}", game.save?.player.name ?? "PLAYER");
+  }
+
+  private say(game: Game, text: string[], then?: (game: Game) => void) {
+    game.push(new MessageScene(text.map((line) => this.fill(game, line)), then));
+  }
+
+  /** A on a puzzle plot: pick a seed to plant, then check whether every plot is right. */
+  private plant(game: Game, plot: { x: number; y: number }) {
+    const puzzle = this.map.data.seedPuzzle!;
+    const solved = !!game.save?.flags[puzzle.flag];
+    const key = `${plot.x},${plot.y}`;
+    if (solved) {
+      const right = puzzle.plots.find((p) => p.x === plot.x && p.y === plot.y)!;
+      return this.say(game, [GROWING.replace("{SEED}", puzzle.seeds[right.seed].name)]);
+    }
+    askChoice(game, this.fill(game, PLANT_QUESTION), puzzle.seeds.map((s) => s.name), (picked, g) => {
+      if (picked === null) return;
+      this.planted.set(key, picked);
+      const done = puzzle.plots.every((p) => this.planted.has(`${p.x},${p.y}`));
+      const right = puzzle.plots.every((p) => this.planted.get(`${p.x},${p.y}`) === p.seed);
+      const message = [PLANTED.replace("{SEED}", puzzle.seeds[picked].name)];
+      if (done && right && g.save) {
+        g.save.flags[puzzle.flag] = true;
+        this.map.flags = g.save.flags;
+      }
+      this.say(g, done ? [...message, ...(right ? PUZZLE_SOLVED : PUZZLE_WRONG)] : message);
+    });
   }
 
   update(game: Game, dt: number) {
@@ -86,6 +119,8 @@ export class OverworldScene implements Scene {
         this.turned.set(`${person.x},${person.y}`, FACING_BACK[this.player.facing]);
         return this.say(game, person.text);
       }
+      const plot = this.map.plotAt(ahead.x, ahead.y);
+      if (plot) return this.plant(game, plot);
       const sign = this.map.signAt(ahead.x, ahead.y);
       if (sign) this.say(game, sign.text);
     }
@@ -152,6 +187,15 @@ export class OverworldScene implements Scene {
         const look = BUILDINGS[b.kind];
         if (b.y + look.height - 1 === row) look.draw(ctx, b.x * TILE - camX, b.y * TILE - camY, b.roof);
       }
+      for (const gate of this.map.data.gates ?? []) {
+        if (gate.y === row && this.map.closedGateAt(gate.x, gate.y)) hedge(ctx, gate.x * TILE - camX, row * TILE - camY, gate.x, row, game.time);
+      }
+      const puzzle = this.map.data.seedPuzzle;
+      for (const plot of puzzle?.plots ?? []) {
+        if (plot.y !== row) continue;
+        const seed = game.save?.flags[puzzle!.flag] ? plot.seed : this.planted.get(`${plot.x},${plot.y}`);
+        drawPlot(ctx, plot.x * TILE - camX, row * TILE - camY, seed === undefined ? null : puzzle!.seeds[seed].color);
+      }
       for (const p of this.map.data.people ?? []) {
         if (p.y !== row) continue;
         const pic = personPicture(p.look, this.turned.get(`${p.x},${p.y}`) ?? p.facing);
@@ -181,4 +225,21 @@ export class OverworldScene implements Scene {
       drawText(ctx, HINT, 16, SCREEN_HEIGHT - 19);
     }
   }
+}
+
+/** A fertiliser plot: a raised bed of dark soil, with a little sprout once something is planted. */
+function drawPlot(ctx: CanvasRenderingContext2D, x: number, y: number, sprout: string | null) {
+  ctx.fillStyle = "#6a4020";
+  ctx.fillRect(x + 1, y + 2, 14, 13);
+  ctx.fillStyle = "#3e2614";
+  ctx.fillRect(x + 2, y + 3, 12, 10);
+  ctx.fillStyle = "#4e3018";
+  for (let i = 0; i < 3; i++) ctx.fillRect(x + 3 + i * 4, y + 5 + (i % 2) * 3, 2, 1);
+  if (!sprout) return;
+  ctx.fillStyle = "#3a8a3e";
+  ctx.fillRect(x + 7, y + 3, 2, 8);
+  ctx.fillRect(x + 4, y + 5, 3, 2);
+  ctx.fillRect(x + 9, y + 4, 3, 2);
+  ctx.fillStyle = sprout;
+  ctx.fillRect(x + 6, y + 1, 4, 3);
 }

@@ -7,7 +7,7 @@
 
 import type { Direction } from "../world/direction";
 
-export type PersonLook = "mum" | "professor";
+export type PersonLook = "mum" | "professor" | "soily";
 
 const BODY = [
   "...kkttttttkk...",
@@ -38,6 +38,8 @@ const PALETTES: Record<PersonLook, Record<string, string>> = {
   mum: { ...SKIN, h: "#7a4a28", H: "#5a3418", t: "#58a060", T: "#3e7846", p: "#c8a070" },
   // A white lab coat over dark clothes.
   professor: { ...SKIN, h: "#4a3a30", H: "#30261e", t: "#f4f4f4", T: "#c8c8d0", p: "#404858" },
+  // Placeholder colours only: green shirt and brown overalls.
+  soily: { ...SKIN, h: "#c89040", H: "#a07028", t: "#4a8a3a", T: "#7a5028", p: "#7a5028" },
 };
 
 export function personPicture(look: PersonLook, facing: Direction) {

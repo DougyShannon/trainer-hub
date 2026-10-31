@@ -2,7 +2,7 @@
 
 import type { Game } from "../engine/game";
 import type { Scene } from "../engine/scene";
-import { COLORS } from "../engine/screen";
+import { COLORS, SCREEN_HEIGHT, SCREEN_WIDTH } from "../engine/screen";
 import { drawText, LINE_HEIGHT, measureText } from "./font";
 import { drawCursor, drawWindow } from "./window";
 import { drawMessageBox, lastLines, MessageScene } from "./textbox";
@@ -65,6 +65,41 @@ export class Menu {
 /** Asks `question` in the message box and waits for YES or NO. B counts as NO. */
 export function askYesNo(game: Game, question: string, answer: (yes: boolean, game: Game) => void) {
   game.push(new MessageScene(question, (g) => g.push(new YesNoScene(question, answer)), false));
+}
+
+/** Asks `question` in the message box with a list of answers beside it. B gives null. */
+export function askChoice(game: Game, question: string, labels: string[], answer: (picked: number | null, game: Game) => void) {
+  game.push(new MessageScene(question, (g) => g.push(new ChoiceScene(question, labels, answer)), false));
+}
+
+class ChoiceScene implements Scene {
+  overlay = true;
+  private menu: Menu;
+  private lines: string[];
+
+  constructor(
+    question: string,
+    labels: string[],
+    private answer: (picked: number | null, game: Game) => void,
+  ) {
+    this.lines = lastLines(question);
+    this.menu = new Menu(labels.map((label) => ({ label })), 0, 0);
+    // Right-hand side, sitting on top of the message box.
+    this.menu.x = SCREEN_WIDTH - this.menu.width - 4;
+    this.menu.y = SCREEN_HEIGHT - 46 - this.menu.height;
+  }
+
+  update(game: Game) {
+    const picked = this.menu.update(game);
+    if (picked === null) return;
+    game.pop();
+    this.answer(picked === "back" ? null : picked, game);
+  }
+
+  draw(ctx: CanvasRenderingContext2D) {
+    drawMessageBox(ctx, this.lines);
+    this.menu.draw(ctx);
+  }
 }
 
 class YesNoScene implements Scene {
