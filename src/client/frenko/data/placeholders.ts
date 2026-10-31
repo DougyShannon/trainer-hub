@@ -11,10 +11,24 @@ export const NEW_GAME_INTRO = [
   "The opening story will go here once it has been written.",
 ];
 
-export const TEST_AREA_NAME = "TEST AREA";
-export const TEST_AREA_SIGN = [
-  "This is a placeholder test area for trying out walking around.",
-  "Real Frenko towns and routes arrive in Stage 3.",
+// Places. "Roucco Town" is Dougy's name; everything else marked [Placeholder] is waiting for his.
+// {PLAYER} is swapped for the player's name.
+export const ROUCCO_NAME = "ROUCCO TOWN";
+export const ROUTE_1_NAME = "ROUTE 1";
+export const ROUCCO_SIGN = ["ROUCCO TOWN"];
+export const PLAYER_HOUSE_SIGN = ["{PLAYER}'s house"];
+export const LAB_SIGN = ["PROF. EUCALYPTUS's POKEMON LAB"];
+export const ROUTE_1_SIGN = ["ROUTE 1 [Placeholder name]", "West to the Gym 1 town. East to ROUCCO TOWN."];
+export const ROUTE_1_END_SIGN = [
+  "[Placeholder] The way on to the Gym 1 town isn't built yet.",
+  "It comes later in Stage 3.",
+];
+
+// People. Mum and Professor Eucalyptus are Dougy's characters; their real lines aren't written yet.
+export const MUM_LINES = ["MUM: [Placeholder] Mum's real lines are still being written."];
+export const PROFESSOR_LINES = [
+  "PROF. EUCALYPTUS: [Placeholder] Her real lines are still being written.",
+  "Choosing your first POKEMON comes in a later stage.",
 ];
 
 export const NOT_READY: Record<string, string> = {

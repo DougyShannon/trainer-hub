@@ -1,14 +1,20 @@
-// The save file. For now it lives in this browser only (like a cartridge in one Game Boy). A later
-// stage can also copy it to the player's Trainer Hub account so it follows them between devices.
+// The save file. Saves live in the player's Trainer Hub account (up to 5 slots), so anyone can play
+// without signing in, but saving needs a signed-in trainer. They follow the player between devices.
 //
 // Each time the save file gains new kinds of information (the party, the Pokédex, badges...), bump
 // SAVE_VERSION and teach `upgrade` to fill in the new parts for older saves, so nobody loses theirs.
 
+import type { Gender } from "../art/player";
 import type { Direction } from "../world/direction";
 
-// Version 2 (Stage 2): the location also records the square the player stands on and which way
-// they face.
-export const SAVE_VERSION = 2;
+// Version 3: saves moved into the trainer's account and gained the player's name and boy/girl choice.
+export const SAVE_VERSION = 3;
+
+/** How many save slots each trainer has. */
+export const SLOT_COUNT = 5;
+
+/** The longest name the player can type. */
+export const NAME_LENGTH = 10;
 
 export type Location = { map: string; x: number; y: number; facing: Direction };
 
@@ -19,51 +25,64 @@ export type SaveFile = {
   savedAt: number;
   /** Total seconds played, shown on the Continue screen. */
   playSeconds: number;
+  player: { name: string; gender: Gender };
   /** Where the player is, or null for a new game (which starts at the map's starting point). */
   location: Location | null;
 };
 
-const KEY = "frenko.save";
-
-export function newSave(): SaveFile {
+export function newSave(player: SaveFile["player"]): SaveFile {
   const now = Date.now();
-  return { version: SAVE_VERSION, startedAt: now, savedAt: now, playSeconds: 0, location: null };
+  return { version: SAVE_VERSION, startedAt: now, savedAt: now, playSeconds: 0, player, location: null };
 }
 
-export function loadSave(): SaveFile | null {
-  try {
-    const stored = JSON.parse(localStorage.getItem(KEY) ?? "null");
-    return stored && typeof stored === "object" ? upgrade(stored) : null;
-  } catch {
-    return null;
+/** The trainer's slots, slot 1 first; null for an empty slot. Signed out, there are none. */
+export type Slots = { signedIn: true; slots: (SaveFile | null)[] } | { signedIn: false };
+
+export async function loadSlots(): Promise<Slots> {
+  const res = await fetch("/api/frenko/saves", { cache: "no-store" });
+  if (res.status === 401) return { signedIn: false };
+  if (!res.ok) throw new Error(`Couldn't load saves (${res.status})`);
+  const body = (await res.json()) as { saves: { slot: number; data: unknown }[] };
+  const slots: (SaveFile | null)[] = Array.from({ length: SLOT_COUNT }, () => null);
+  for (const { slot, data } of body.saves) {
+    if (slot >= 1 && slot <= SLOT_COUNT && data && typeof data === "object") slots[slot - 1] = upgrade(data as Partial<SaveFile>);
   }
+  return { signedIn: true, slots };
 }
 
-/** Writes the save. Returns false when the browser won't store it (private browsing, full storage). */
-export function writeSave(save: SaveFile): boolean {
+/** Saves into a slot (1 to 5). */
+export async function writeSlot(slot: number, save: SaveFile): Promise<"saved" | "signed-out" | "failed"> {
   try {
-    save.savedAt = Date.now();
-    localStorage.setItem(KEY, JSON.stringify(save));
-    return true;
+    const savedAt = Date.now();
+    const res = await fetch(`/api/frenko/saves/${slot}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ data: { ...save, savedAt } }),
+    });
+    if (res.status === 401) return "signed-out";
+    if (!res.ok) return "failed";
+    save.savedAt = savedAt;
+    return "saved";
   } catch {
-    return false;
+    return "failed";
   }
 }
 
 function upgrade(stored: Partial<SaveFile>): SaveFile {
-  const fresh = newSave();
+  const name = typeof stored.player?.name === "string" ? stored.player.name.slice(0, NAME_LENGTH) : "";
   return {
     version: SAVE_VERSION,
-    startedAt: Number(stored.startedAt) || fresh.startedAt,
-    savedAt: Number(stored.savedAt) || fresh.savedAt,
+    startedAt: Number(stored.startedAt) || Date.now(),
+    savedAt: Number(stored.savedAt) || Date.now(),
     playSeconds: Number(stored.playSeconds) || 0,
+    player: { name: name || "PLAYER", gender: stored.player?.gender === "girl" ? "girl" : "boy" },
     location: validLocation(stored.location),
   };
 }
 
 const FACINGS: Direction[] = ["up", "down", "left", "right"];
 
-/** Saves from Stage 1 (no square recorded) start back at the map's starting point. */
+/** A missing or broken location starts back at the map's starting point. */
 function validLocation(location: unknown): Location | null {
   const l = location as Partial<Location> | null | undefined;
   if (!l || typeof l.map !== "string" || !Number.isInteger(l.x) || !Number.isInteger(l.y)) return null;
