@@ -57,6 +57,8 @@ function save(game: Game) {
         saved
           ? "The game was saved on this device."
           : "Saving didn't work. This browser may be blocking storage, for example in a private window.",
+        // Back to walking around once the message is read, as in the GBA games.
+        (after) => saved && after.pop(),
       ),
     );
   });
