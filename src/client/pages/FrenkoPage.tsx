@@ -85,7 +85,7 @@ export function FrenkoPage() {
             <PageLogo />
             Frenko Region
           </h1>
-          <p className="muted">A Pokémon-style adventure in the Frenko Region. Early test build: walking around a test area.</p>
+          <p className="muted">A Pokémon-style adventure in the Frenko Region. Early test build: Roucco Town and Route 1.</p>
         </div>
       </div>
       {error && <ErrorBox message={error} />}
