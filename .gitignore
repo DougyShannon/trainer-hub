@@ -3,6 +3,7 @@ dist/
 .wrangler/
 .dev.vars
 data/
+!src/client/frenko/data/
 *.log
 scripts/champions-engine/ps/
 scripts/champions-engine/ps-data.ts
