@@ -1,8 +1,7 @@
-// ROUTE 1 (a placeholder name): the first route, heading west out of Roucco Town toward the Gym 1
-// town, as on Dougy's region map. The tall grass is where wild Pokémon will appear in Stage 4. The
-// west end is closed off until the Gym 1 town is built.
+// ROUTE 1: the first route, heading west out of Roucco Town to Leafsoil Farms (the Gym 1 town), as
+// on Dougy's region map. The tall grass is where wild Pokémon will appear in Stage 4.
 
-import { ROUTE_1_END_SIGN, ROUTE_1_NAME, ROUTE_1_SIGN } from "../../data/placeholders";
+import { ROUTE_1_WEST_SIGN, ROUTE_1_NAME, ROUTE_1_SIGN } from "../../data/placeholders";
 import type { MapData } from "../map";
 
 export const ROUTE_1: MapData = {
@@ -18,8 +17,8 @@ export const ROUTE_1: MapData = {
     "T..gggggg.....,.gggggggg.,....ggggggTT.T",
     "T..gggggg....f,.gggggggg.,.fR..........T",
     "TS............,.gggggggg.,...........S.T",
-    "T,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,",
-    "T,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,",
+    ",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,",
+    ",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,",
     "T...........................gggggg.....T",
     "T...gggggggTTT..R..ggggg....ggggggf....T",
     "T...gggggggTTT.....ggggg..TTgggggg.....T",
@@ -28,9 +27,9 @@ export const ROUTE_1: MapData = {
     "TTT...TT...TT...TT...TT...TT...TT...TT.T",
     "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
   ],
-  edges: { right: { map: "roucco", offset: 2 } },
+  edges: { left: { map: "leafsoil", offset: 3 }, right: { map: "roucco", offset: 2 } },
   signs: [
     { x: 37, y: 6, text: ROUTE_1_SIGN },
-    { x: 1, y: 6, text: ROUTE_1_END_SIGN },
+    { x: 1, y: 6, text: ROUTE_1_WEST_SIGN },
   ],
 };

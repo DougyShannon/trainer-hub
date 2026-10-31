@@ -8,7 +8,8 @@ import type { Gender } from "../art/player";
 import type { Direction } from "../world/direction";
 
 // Version 3: saves moved into the trainer's account and gained the player's name and boy/girl choice.
-export const SAVE_VERSION = 3;
+// Version 4: flags for things the player has done (like solving a Gym puzzle).
+export const SAVE_VERSION = 4;
 
 /** How many save slots each trainer has. */
 export const SLOT_COUNT = 5;
@@ -28,11 +29,13 @@ export type SaveFile = {
   player: { name: string; gender: Gender };
   /** Where the player is, or null for a new game (which starts at the map's starting point). */
   location: Location | null;
+  /** Things the player has done, by name, such as "leafsoil-gym-seeds" once that puzzle is solved. */
+  flags: Record<string, boolean>;
 };
 
 export function newSave(player: SaveFile["player"]): SaveFile {
   const now = Date.now();
-  return { version: SAVE_VERSION, startedAt: now, savedAt: now, playSeconds: 0, player, location: null };
+  return { version: SAVE_VERSION, startedAt: now, savedAt: now, playSeconds: 0, player, location: null, flags: {} };
 }
 
 /** The trainer's slots, slot 1 first; null for an empty slot. Signed out, there are none. */
@@ -77,7 +80,13 @@ function upgrade(stored: Partial<SaveFile>): SaveFile {
     playSeconds: Number(stored.playSeconds) || 0,
     player: { name: name || "PLAYER", gender: stored.player?.gender === "girl" ? "girl" : "boy" },
     location: validLocation(stored.location),
+    flags: validFlags(stored.flags),
   };
+}
+
+function validFlags(flags: unknown): Record<string, boolean> {
+  if (!flags || typeof flags !== "object") return {};
+  return Object.fromEntries(Object.entries(flags).filter(([, v]) => v === true));
 }
 
 const FACINGS: Direction[] = ["up", "down", "left", "right"];

@@ -4,7 +4,7 @@
 
 import { TILE } from "../engine/screen";
 
-export type BuildingKind = "house" | "lab";
+export type BuildingKind = "house" | "lab" | "gym";
 
 type Look = {
   /** Size in map squares. */
@@ -71,4 +71,20 @@ function drawHouse(ctx: CanvasRenderingContext2D, x: number, y: number, roof: st
 export const BUILDINGS: Record<BuildingKind, Look> = {
   house: { width: 4, height: 3, door: 2, draw: (ctx, x, y, roof) => drawHouse(ctx, x, y, roof, 4, 3, 2) },
   lab: { width: 6, height: 4, door: 2, draw: (ctx, x, y, roof) => drawHouse(ctx, x, y, roof, 6, 4, 2) },
+  gym: {
+    width: 6,
+    height: 4,
+    door: 2,
+    draw: (ctx, x, y, roof) => {
+      drawHouse(ctx, x, y, roof, 6, 4, 2);
+      // A plain placeholder badge on the roof, so the Gym stands out from the houses.
+      ctx.fillStyle = "#f8f8f8";
+      ctx.fillRect(x + 40, y + 10, 16, 16);
+      ctx.fillStyle = "#f0c030";
+      ctx.fillRect(x + 42, y + 12, 12, 12);
+      ctx.fillStyle = "#c89818";
+      ctx.fillRect(x + 46, y + 14, 4, 8);
+      ctx.fillRect(x + 44, y + 16, 8, 4);
+    },
+  },
 };

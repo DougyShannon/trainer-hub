@@ -2,9 +2,19 @@
 
 import { GameMap, type MapData } from "../map";
 import { LAB, PLAYER_HOUSE, ROUCCO } from "./roucco";
+import { LEAFSOIL, LEAFSOIL_CENTER, LEAFSOIL_GYM, LEAFSOIL_MART } from "./leafsoil";
 import { ROUTE_1 } from "./route1";
 
-export const MAPS: Record<string, MapData> = Object.fromEntries([ROUCCO, PLAYER_HOUSE, LAB, ROUTE_1].map((m) => [m.id, m]));
+export const MAPS: Record<string, MapData> = Object.fromEntries([
+  ROUCCO,
+  PLAYER_HOUSE,
+  LAB,
+  ROUTE_1,
+  LEAFSOIL,
+  LEAFSOIL_CENTER,
+  LEAFSOIL_MART,
+  LEAFSOIL_GYM,
+].map((m) => [m.id, m]));
 
 /** Where a new game starts: the player's house. */
 export const FIRST_MAP = PLAYER_HOUSE.id;
