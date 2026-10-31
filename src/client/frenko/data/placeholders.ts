@@ -11,9 +11,10 @@ export const NEW_GAME_INTRO = [
   "The opening story will go here once it has been written.",
 ];
 
-export const TEST_ROOM_SIGN = [
-  "This is the blank test room. It is here to try the screen and buttons.",
-  "Stage 2 adds the player character, walking around this room.",
+export const TEST_AREA_NAME = "TEST AREA";
+export const TEST_AREA_SIGN = [
+  "This is a placeholder test area for trying out walking around.",
+  "Real Frenko towns and routes arrive in Stage 3.",
 ];
 
 export const NOT_READY: Record<string, string> = {

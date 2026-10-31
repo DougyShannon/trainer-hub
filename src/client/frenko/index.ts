@@ -4,7 +4,9 @@
 // Folders:
 //   engine/  the game loop, screen size and buttons
 //   ui/      the pixel font, boxes, menus and the message box
-//   scenes/  each mode of the game (title, main menu, the test room, the Start menu...)
+//   scenes/  each mode of the game (title, main menu, walking around, the Start menu...)
+//   world/   maps, map squares (tiles), the player and how they move
+//   art/     pixel-art pictures written as letter grids (placeholders until the real art exists)
 //   save/    the save file and options, kept in this browser
 //   data/    Frenko's own content; only placeholder text until Dougy's designs go in
 

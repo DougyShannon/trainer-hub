@@ -9,7 +9,7 @@ import { drawText } from "../ui/font";
 import { askYesNo, Menu } from "../ui/menu";
 import { drawWindow } from "../ui/window";
 import { OptionsScene } from "./options";
-import { TestRoomScene } from "./testRoom";
+import { OverworldScene } from "./overworld";
 import { TitleScene } from "./title";
 
 const BACKGROUND = "#5868a0";
@@ -36,7 +36,7 @@ export class MainMenuScene implements Scene {
     const label = this.menu.items[picked].label;
     if (label === "CONTINUE" && this.existing) {
       game.save = this.existing;
-      game.switchTo(new TestRoomScene());
+      game.switchTo(new OverworldScene(game));
     } else if (label === "NEW GAME") {
       if (!this.existing) return startNewGame(game);
       askYesNo(game, "There is already a saved game. Start a new one? The old save stays until you save over it.", (yes, g) => {
@@ -66,5 +66,5 @@ export class MainMenuScene implements Scene {
 
 function startNewGame(game: Game) {
   game.save = newSave();
-  game.switchTo(new TestRoomScene(NEW_GAME_INTRO));
+  game.switchTo(new OverworldScene(game, NEW_GAME_INTRO));
 }

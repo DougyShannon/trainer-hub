@@ -31,11 +31,14 @@ export class Input {
   private held = new Map<Button, number>(); // button → seconds held
   private fresh = new Set<Button>(); // pressed since the last frame
   private repeats = new Set<Button>(); // repeat ticks this frame
+  private order = new Map<Button, number>(); // when each held button went down, to find the newest
+  private presses = 0;
 
   press(button: Button) {
     if (!this.held.has(button)) {
       this.held.set(button, 0);
       this.fresh.add(button);
+      this.order.set(button, ++this.presses);
     }
   }
 
@@ -75,6 +78,20 @@ export class Input {
   /** True when first pressed, then again every so often while held (for moving through menus). */
   repeated(button: Button) {
     return this.fresh.has(button) || this.repeats.has(button);
+  }
+
+  /**
+   * The direction to walk in: of the D-pad buttons being held, the one pressed most recently (so
+   * holding Up and then also pressing Right turns right, like the GBA games). Null when none.
+   */
+  heldDirection(): "up" | "down" | "left" | "right" | null {
+    let best: "up" | "down" | "left" | "right" | null = null;
+    for (const dir of ["up", "down", "left", "right"] as const) {
+      // A tap so quick it was let go within one frame still counts for that frame (to turn on the spot).
+      const down = this.held.has(dir) || this.fresh.has(dir);
+      if (down && (!best || this.order.get(dir)! > this.order.get(best)!)) best = dir;
+    }
+    return best;
   }
 
   /** Forgets this frame's presses, so one press isn't used by two scenes. */
