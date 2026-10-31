@@ -443,8 +443,10 @@ textarea { resize: vertical; font: inherit; }
 @media (max-width: 640px) {
   .site-header-inner { gap: 8px 16px; padding-block: 10px 6px; }
   .account { order: 2; }
-  .site-nav { order: 3; width: 100%; flex-wrap: nowrap; justify-content: space-between; gap: 0; }
-  .site-nav a { padding: 7px 8px; }
+  /* Eight links don't all fit on narrow phones, so the row scrolls sideways instead of widening the page. */
+  .site-nav { order: 3; width: 100%; flex-wrap: nowrap; justify-content: space-between; gap: 0; overflow-x: auto; scrollbar-width: none; }
+  .site-nav::-webkit-scrollbar { display: none; }
+  .site-nav a { padding: 7px 8px; white-space: nowrap; }
   .account-btn span { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
 
@@ -1573,3 +1575,43 @@ button.guide-mark { border: 0; font-family: inherit; }
 .ladder-head { margin: 24px 0 12px; }
 .live-waiting { max-width: 640px; margin: 24px auto; display: grid; gap: 12px; }
 .live-waiting h1 { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+/* Frenko Region game (/frenko). The game draws on a 240 × 160 canvas; CSS scales it up with sharp
+   pixels. On touch screens a GBA-style button pad sits under the screen. */
+.frenko-console { display: grid; gap: 14px; justify-items: center; background: #2a2f45; border-radius: calc(18px * var(--round)); padding: 14px; max-width: 760px; margin: 0 auto; box-shadow: var(--shadow); touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+.frenko-screen { position: relative; width: 100%; aspect-ratio: 3 / 2; background: #101010; border-radius: 4px; overflow: hidden; }
+.frenko-screen canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; image-rendering: crisp-edges; }
+.frenko-loading { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; }
+.frenko-console:fullscreen { max-width: none; border-radius: 0; align-content: center; height: 100%; }
+.frenko-console:fullscreen .frenko-screen { width: min(100%, calc((100vh - 200px) * 1.5)); }
+.frenko-help { max-width: 760px; margin: 12px auto 0; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+.frenko-help p { margin: 0; }
+.frenko-tools { display: flex; gap: 8px; flex-wrap: wrap; }
+.frenko-pad { width: 100%; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; padding: 4px 6px; }
+.frenko-pad button { border: 0; cursor: pointer; touch-action: none; -webkit-tap-highlight-color: transparent; }
+.frenko-dpad { display: grid; grid-template-columns: repeat(3, 44px); grid-template-rows: repeat(3, 44px); }
+.frenko-dpad button, .frenko-dpad .middle { background: #15182a; }
+.frenko-dpad button:active { background: #3a4170; }
+.frenko-dpad .up { grid-area: 1 / 2; border-radius: 6px 6px 0 0; }
+.frenko-dpad .left { grid-area: 2 / 1; border-radius: 6px 0 0 6px; }
+.frenko-dpad .middle { grid-area: 2 / 2; }
+.frenko-dpad .right { grid-area: 2 / 3; border-radius: 0 6px 6px 0; }
+.frenko-dpad .down { grid-area: 3 / 2; border-radius: 0 0 6px 6px; }
+.frenko-start { justify-self: center; background: #15182a; color: #c8cde8; font: 700 11px/1 var(--mono); letter-spacing: 0.08em; padding: 9px 16px; border-radius: 999px; }
+.frenko-start:active { background: #3a4170; }
+.frenko-ab { display: flex; gap: 12px; align-items: center; transform: rotate(-18deg); }
+.frenko-ab button { width: 58px; height: 58px; border-radius: 50%; background: #8c2f4a; color: #ffe3ea; font: 800 20px/1 var(--display); box-shadow: inset 0 -4px 0 rgb(0 0 0 / 25%); }
+.frenko-ab .a { margin-top: -26px; }
+.frenko-ab button:active { background: #b8456a; box-shadow: none; }
+@media (max-width: 520px) {
+  .frenko-console { padding: 10px; border-radius: calc(12px * var(--round)); }
+  .frenko-dpad { grid-template-columns: repeat(3, 40px); grid-template-rows: repeat(3, 40px); }
+  .frenko-ab button { width: 52px; height: 52px; }
+}
+@media (max-width: 380px) {
+  .frenko-pad { gap: 6px; padding: 4px 2px; }
+  .frenko-dpad { grid-template-columns: repeat(3, 36px); grid-template-rows: repeat(3, 36px); }
+  .frenko-start { padding: 8px 10px; }
+  .frenko-ab { gap: 8px; }
+  .frenko-ab button { width: 46px; height: 46px; font-size: 17px; }
+}
