@@ -33,6 +33,22 @@ export class Input {
   private repeats = new Set<Button>(); // repeat ticks this frame
   private order = new Map<Button, number>(); // when each held button went down, to find the newest
   private presses = 0;
+  /**
+   * While true (the name screen), the page sends letter and number keys here as typing instead of
+   * pressing buttons, so typing "Wade" doesn't also walk up, left and right.
+   */
+  textMode = false;
+  private letters: string[] = [];
+
+  /** A letter or number typed on the keyboard (only while `textMode` is on). */
+  type(char: string) {
+    this.letters.push(char);
+  }
+
+  /** The letters typed since the last frame. */
+  typed(): string[] {
+    return this.letters;
+  }
 
   press(button: Button) {
     if (!this.held.has(button)) {
@@ -53,6 +69,7 @@ export class Input {
   /** Called by the game loop once a frame, after the scenes have read the buttons. */
   endFrame(dt: number) {
     this.fresh.clear();
+    this.letters = [];
     this.repeats.clear();
     for (const [button, time] of this.held) {
       const next = time + dt;
@@ -97,6 +114,7 @@ export class Input {
   /** Forgets this frame's presses, so one press isn't used by two scenes. */
   consume() {
     this.fresh.clear();
+    this.letters = [];
     this.repeats.clear();
   }
 }

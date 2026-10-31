@@ -4,7 +4,7 @@
 
 import type { Input } from "../engine/input";
 import { TILE } from "../engine/screen";
-import { PALETTE, PLAYER_ART, type Pose } from "../art/player";
+import { PLAYER_LOOKS, type Gender, type Pose } from "../art/player";
 import { sprite } from "../art/pixels";
 import { STEP, type Direction } from "./direction";
 import type { GameMap } from "./map";
@@ -28,7 +28,10 @@ export class Player {
   /** Which foot leads; it swaps every step so the walk alternates. */
   private foot = false;
 
-  constructor(at: { x: number; y: number; facing: Direction }) {
+  constructor(
+    at: { x: number; y: number; facing: Direction },
+    private gender: Gender = "boy",
+  ) {
     this.x = at.x;
     this.y = at.y;
     this.facing = at.facing;
@@ -117,7 +120,8 @@ export class Player {
   draw(ctx: CanvasRenderingContext2D, screenX: number, screenY: number) {
     const view = this.facing === "left" ? "right" : this.facing;
     const pose = this.pose();
-    const image = sprite(`player-${view}-${pose}`, PLAYER_ART[view][pose], PALETTE, this.facing === "left");
+    const look = PLAYER_LOOKS[this.gender];
+    const image = sprite(`player-${this.gender}-${view}-${pose}`, look.frames[view][pose], look.palette, this.facing === "left");
     // The picture is 20 pixels tall, so it stands with its feet on the bottom of the square.
     ctx.drawImage(image, screenX, screenY + TILE - image.height);
   }

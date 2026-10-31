@@ -16,6 +16,8 @@ export class Game {
   options: Options = loadOptions();
   /** The adventure being played, or null on the title screen. */
   save: SaveFile | null = null;
+  /** The slot (1 to 5) this adventure was loaded from or last saved to; null until first saved. */
+  saveSlot: number | null = null;
   /** Seconds since the game started, for blinking arrows and the like. */
   time = 0;
 

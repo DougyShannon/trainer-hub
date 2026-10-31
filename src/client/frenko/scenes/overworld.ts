@@ -34,7 +34,7 @@ export class OverworldScene implements Scene {
     const location = game.save?.location;
     this.map = new GameMap(MAPS[location?.map ?? ""] ?? MAPS[FIRST_MAP]);
     const start = location && location.map === this.map.data.id && this.map.walkable(location.x, location.y) ? location : this.map.spawn;
-    this.player = new Player(start);
+    this.player = new Player(start, game.save?.player.gender);
   }
 
   update(game: Game, dt: number) {

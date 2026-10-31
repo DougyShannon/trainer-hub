@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { PageLogo, ErrorBox, Loading } from "../components/ui";
+import { useAuth } from "../lib/auth";
 import type { Button, Frenko } from "../frenko";
 
 // The game code only downloads when someone opens this page, so the rest of the site stays quick.
@@ -15,6 +16,14 @@ export function FrenkoPage() {
   const [game, setGame] = useState<Frenko | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showPad, setShowPad] = useState(touchScreen);
+  const { user, ready, refresh } = useAuth();
+
+  // Signing in happens in another tab, so check again whenever the player comes back to this one.
+  useEffect(() => {
+    const check = () => void refresh();
+    window.addEventListener("focus", check);
+    return () => window.removeEventListener("focus", check);
+  }, [refresh]);
 
   useEffect(() => {
     let live = true;
@@ -22,6 +31,12 @@ export function FrenkoPage() {
     let keys: FrenkoModule["KEYS"] = {};
     const typing = (e: KeyboardEvent) => e.target instanceof HTMLElement && e.target.closest("input, textarea, select, [contenteditable]");
     const down = (e: KeyboardEvent) => {
+      // On the name screen, letters and numbers are typed rather than pressing buttons.
+      if (running?.input.textMode && /^[a-zA-Z0-9]$/.test(e.key) && !typing(e) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        running.input.type(e.key);
+        return;
+      }
       const button = keys[e.code];
       if (!running || !button || typing(e) || e.ctrlKey || e.metaKey || e.altKey) return;
       e.preventDefault(); // stop the arrow keys and space scrolling the page
@@ -70,10 +85,19 @@ export function FrenkoPage() {
             <PageLogo />
             Frenko Region
           </h1>
-          <p className="muted">A Pokémon-style adventure in the Frenko Region. Early test build: the game's foundation only.</p>
+          <p className="muted">A Pokémon-style adventure in the Frenko Region. Early test build: walking around a test area.</p>
         </div>
       </div>
       {error && <ErrorBox message={error} />}
+      {ready && !user && (
+        <p className="frenko-signin">
+          You're not signed in. You can play, but to save your game{" "}
+          <a href="/login?next=/" target="_blank" rel="noopener">
+            sign in
+          </a>{" "}
+          (it opens a new tab), then come back to this tab and save.
+        </p>
+      )}
       <div className="frenko-console" ref={console_}>
         <div className="frenko-screen">
           <canvas ref={canvas} width={240} height={160} aria-label="Frenko game screen" />

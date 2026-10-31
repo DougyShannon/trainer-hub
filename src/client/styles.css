@@ -1584,6 +1584,7 @@ button.guide-mark { border: 0; font-family: inherit; }
 .frenko-loading { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; }
 .frenko-console:fullscreen { max-width: none; border-radius: 0; align-content: center; height: 100%; }
 .frenko-console:fullscreen .frenko-screen { width: min(100%, calc((100vh - 200px) * 1.5)); }
+.frenko-signin { max-width: 760px; margin: 0 auto 12px; padding: 10px 14px; background: var(--accent-soft); border-radius: calc(10px * var(--round)); }
 .frenko-help { max-width: 760px; margin: 12px auto 0; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
 .frenko-help p { margin: 0; }
 .frenko-tools { display: flex; gap: 8px; flex-wrap: wrap; }
