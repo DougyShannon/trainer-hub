@@ -116,6 +116,7 @@ export function Layout() {
             <NavLink to="/play">Play</NavLink>
             <NavLink to="/battle">Battle</NavLink>
             <NavLink to="/arcade">Arcade</NavLink>
+            <NavLink to="/frenko">Frenko</NavLink>
           </nav>
           <AccountMenu />
         </div>
