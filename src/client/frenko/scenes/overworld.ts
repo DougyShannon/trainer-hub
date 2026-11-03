@@ -19,10 +19,14 @@ import type { GameMap, Spot } from "../world/map";
 import { FIRST_MAP, loadMap } from "../world/maps";
 import { Player } from "../world/player";
 import { StartMenuScene } from "./startMenu";
+import { POKEMON } from "../data/pokemon";
+import { WildEncounterScene } from "./wildEncounter";
 
 /** Where the player's square sits on screen: the middle, like the GBA games (15 × 10 squares). */
 const PLAYER_SCREEN_X = (SCREEN_WIDTH - TILE) / 2;
 const PLAYER_SCREEN_Y = (SCREEN_HEIGHT - TILE) / 2;
+/** The chance of meeting a wild Pokémon with each step in tall grass. */
+const ENCOUNTER_CHANCE = 1 / 10;
 /** Seconds the place name stays up after arriving. */
 const NAME_TIME = 2.5;
 const HINT = "Arrow keys or WASD to walk";
@@ -141,7 +145,24 @@ export class OverworldScene implements Scene {
       return this.arrive(game);
     }
     const warp = this.map.warpAt(this.player.x, this.player.y);
-    if (warp) this.goTo(game, warp.to);
+    if (warp) return this.goTo(game, warp.to);
+    if (this.map.tile(this.player.x, this.player.y).name === "tall grass") this.maybeMeetWild(game);
+  }
+
+  /** Each step in tall grass might meet one of the map's wild Pokémon. */
+  private maybeMeetWild(game: Game) {
+    const wild = this.map.data.wild;
+    if (!wild?.length || Math.random() >= ENCOUNTER_CHANCE) return;
+    let roll = Math.random() * wild.reduce((sum, w) => sum + w.weight, 0);
+    const pick = wild.find((w) => (roll -= w.weight) < 0) ?? wild[0];
+    const species = POKEMON[pick.species];
+    if (!species) return;
+    const level = pick.minLevel + Math.floor(Math.random() * (pick.maxLevel - pick.minLevel + 1));
+    this.player.stop();
+    game.fadeOut(() => {
+      game.push(new WildEncounterScene(species, level));
+      game.fadeIn();
+    });
   }
 
   private goTo(game: Game, to: Spot) {

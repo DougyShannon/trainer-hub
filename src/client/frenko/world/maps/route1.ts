@@ -28,6 +28,12 @@ export const ROUTE_1: MapData = {
     "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
   ],
   edges: { left: { map: "leafsoil", offset: 3 }, right: { map: "roucco", offset: 2 } },
+  // Dougy's Route 1 Pokémon, levels 2 to 6. Equally common until Dougy says otherwise.
+  wild: [
+    { species: "cheektounge", minLevel: 2, maxLevel: 6, weight: 1 },
+    { species: "gully", minLevel: 2, maxLevel: 6, weight: 1 },
+    { species: "spikecoon", minLevel: 2, maxLevel: 6, weight: 1 },
+  ],
   signs: [
     { x: 37, y: 6, text: ROUTE_1_SIGN },
     { x: 1, y: 6, text: ROUTE_1_WEST_SIGN },
