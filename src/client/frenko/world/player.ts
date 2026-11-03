@@ -41,6 +41,12 @@ export class Player {
     return this.progress !== null;
   }
 
+  /** Stops walking at once (finishing nothing), for when something interrupts, like a wild Pokémon. */
+  stop() {
+    this.progress = null;
+    this.bumping = false;
+  }
+
   /** The square in front of the player (for reading signs and, later, talking to people). */
   facingSquare() {
     return { x: this.x + STEP[this.facing].x, y: this.y + STEP[this.facing].y };

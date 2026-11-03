@@ -33,6 +33,11 @@ export type MapData = {
   people?: { look: PersonLook; x: number; y: number; facing: Direction; text: string[] }[];
   /** What each sign says, by its column and row. */
   signs?: { x: number; y: number; text: string[] }[];
+  /**
+   * Wild Pokémon in this map's tall grass: each step in the grass has a chance of meeting one, picked
+   * by `weight` (a Pokémon with weight 2 turns up twice as often as one with weight 1).
+   */
+  wild?: { species: string; minLevel: number; maxLevel: number; weight: number }[];
   /** Hedge gates that stand closed until the player has the named flag (see SaveFile.flags). */
   gates?: { x: number; y: number; flag: string }[];
   /**

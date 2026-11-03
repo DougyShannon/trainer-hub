@@ -56,6 +56,16 @@ export const PROFESSOR_LINES = [
 ];
 export const SOILY_LINES = ["SOILY: [Placeholder] Soily's real lines are still being written.", "Gym battles come in a later stage."];
 
+// Meeting wild Pokémon (catching comes in Stage 4, battles in Stage 5).
+export const WILD_APPEARED = "A wild {POKEMON} appeared!";
+export const WHAT_WILL_YOU_DO = "What will {PLAYER} do?";
+export const BATTLE_NOT_READY: Record<string, string> = {
+  FIGHT: "[Placeholder] Battling comes in Stage 5. For now, you can only RUN.",
+  BAG: "[Placeholder] Poké Balls and catching come with the Bag in a later stage.",
+  POKEMON: "[Placeholder] You don't have any POKEMON yet!",
+};
+export const GOT_AWAY = "Got away safely!";
+
 export const NOT_READY: Record<string, string> = {
   pokedex: "The Pokédex arrives in Stage 6.",
   pokemon: "Your party arrives in Stage 6.",
