@@ -215,7 +215,7 @@ function MovePicker({
     const needle = q.trim().toLowerCase();
     const list = all.filter(
       (m) =>
-        (!needle || m.name.toLowerCase().includes(needle) || m.desc.toLowerCase().includes(needle)) &&
+        (!needle || m.name.toLowerCase().includes(needle) || (m.desc ?? "").toLowerCase().includes(needle)) &&
         (!type || m.type === type) &&
         (!cat || m.category === cat),
     );
@@ -321,7 +321,7 @@ function NamedPicker({
   const [q, setQ] = useState("");
   const list = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return needle ? byRelevance(rows.filter((r) => r.name.toLowerCase().includes(needle) || r.desc.toLowerCase().includes(needle)), needle) : rows;
+    return needle ? byRelevance(rows.filter((r) => r.name.toLowerCase().includes(needle) || (r.desc ?? "").toLowerCase().includes(needle)), needle) : rows;
   }, [rows, q]);
   const { limit, more } = useShowMore(list);
   return (
