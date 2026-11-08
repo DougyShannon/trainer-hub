@@ -47,6 +47,17 @@ function find<K extends "species" | "moves" | "abilities" | "items">(kind: K, na
   return other?.exists ? other : main;
 }
 
+/**
+ * What a move, item or ability does, in one line. The Champions engine is built without the
+ * description text (and the Hidden Power types have none), so fall back to the main data's
+ * text for the same thing, then to "" so searches never trip over a missing description.
+ */
+function describe(kind: "moves" | "items" | "abilities", e: { id: string; shortDesc?: string; desc?: string }): string {
+  if (e.shortDesc || e.desc) return e.shortDesc || e.desc || "";
+  const main = Dex[kind].get(e.id) as { shortDesc?: string; desc?: string };
+  return main.shortDesc || main.desc || "";
+}
+
 export const STAT_LABELS: Record<StatID, string> = { hp: "HP", atk: "Atk", def: "Def", spa: "SpA", spd: "SpD", spe: "Spe" };
 
 export function formatInfo(id: string): FormatInfo {
@@ -202,7 +213,7 @@ const toMoveRow = (m: ReturnType<typeof Dex.moves.get>): MoveRow => ({
   power: m.basePower,
   accuracy: m.accuracy,
   pp: m.pp,
-  desc: m.shortDesc || m.desc,
+  desc: describe("moves", m),
 });
 
 const allMoveRows = new Map<typeof Dex, MoveRow[]>();
@@ -250,7 +261,7 @@ export function abilitiesFor(formatId: string, species: string): NamedRow[] {
     c.allAbilities ??= Dex.abilities
       .all()
       .filter((a) => a.exists && a.id !== "noability" && a.isNonstandard !== "CAP" && a.isNonstandard !== "Custom")
-      .map((a) => ({ id: a.id, name: a.name, desc: a.shortDesc || a.desc }))
+      .map((a) => ({ id: a.id, name: a.name, desc: describe("abilities", a) }))
       .sort((a, b) => a.name.localeCompare(b.name));
     return c.allAbilities;
   }
@@ -260,13 +271,13 @@ export function abilitiesFor(formatId: string, species: string): NamedRow[] {
     .filter(([, name]) => !!name)
     .map(([slot, name]) => {
       const a = c.dex.abilities.get(name as string);
-      return { id: a.id, name: a.name, desc: a.shortDesc || a.desc, hidden: slot === "H" };
+      return { id: a.id, name: a.name, desc: describe("abilities", a), hidden: slot === "H" };
     });
 }
 
 export function abilityDesc(name: string) {
   const a = find("abilities", name);
-  return a.exists ? a.shortDesc || a.desc : "";
+  return a.exists ? describe("abilities", a) : "";
 }
 
 /** Held items allowed in the format, with what each one does. */
@@ -282,14 +293,14 @@ export function itemsFor(formatId: string): NamedRow[] {
       if (i.isNonstandard && !(c.natDex && i.isNonstandard === "Past")) return false;
       return !rt.isBanned(`item:${i.id}`);
     })
-    .map((i) => ({ id: i.id, name: i.name, desc: i.shortDesc || i.desc }))
+    .map((i) => ({ id: i.id, name: i.name, desc: describe("items", i) }))
     .sort((a, b) => a.name.localeCompare(b.name));
   return c.items;
 }
 
 export function itemDesc(name: string) {
   const i = find("items", name);
-  return i.exists ? i.shortDesc || i.desc : "";
+  return i.exists ? describe("items", i) : "";
 }
 
 export type NatureRow = { name: string; plus: StatID | null; minus: StatID | null };
